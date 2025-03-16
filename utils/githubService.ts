@@ -6,7 +6,7 @@ import User from '../models/userModel';
 import { generateProjectReadme } from './githubTemplates';
 import { redis } from './redis';
 import dotenv from 'dotenv';
-import { generateRoleBreakdowns } from './githubAiService';
+import { generateRoleBreakdowns } from './githubAIService';
 
 dotenv.config();
 

@@ -4,9 +4,14 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Initialize OpenAI client
+// Initialize OpenAI client with OpenRouter configuration
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY,
+  defaultHeaders: {
+    "HTTP-Referer": process.env.FRONTEND_URL || "https://projectrix.vercel.app",
+    "X-Title": "Projectrix"
+  }
 });
 
 /**
@@ -58,25 +63,40 @@ async function generateRoleDocument(project: any, role: any): Promise<string> {
     // Construct a detailed prompt that provides full context about the project and role
     const prompt = constructRoleDocumentPrompt(project, role);
     
-    // Make the OpenAI API call
+    // Make the OpenAI API call with Deepseek model
     const response = await openai.chat.completions.create({
-      model: "gpt-4-turbo",
+      model: "deepseek/deepseek-r1-zero:free",
       messages: [
         {
           role: "system",
-          content: "You are an expert software architect and technical writer specializing in creating detailed documentation for software development teams. Your task is to create comprehensive role documents for software projects that help developers understand their responsibilities and how their work fits into the overall project."
+          content: "You are an expert software architect and technical writer specializing in creating detailed documentation for software development teams. Your task is to create comprehensive role documents for software projects that help developers understand their responsibilities and how their work fits into the overall project. Do not use LaTeX formatting like \\boxed{} in your responses."
         },
         {
           role: "user",
-          content: prompt
+          content: prompt + "\n\nReturn a well-formatted markdown document without any LaTeX formatting such as \\boxed{}."
         }
       ],
       temperature: 0.3, // Lower temperature for more consistent, factual output
       max_tokens: 3000  // Allow for detailed document
     });
     
-    // Extract and return the generated document
-    return response.choices[0].message.content || '';
+    // Extract content from response
+    let content = response.choices[0].message.content || '';
+    
+    // Remove LaTeX \boxed{} formatting if present
+    if (content.includes('\\boxed{')) {
+      console.log('LaTeX formatting detected in document, cleaning response...');
+      content = content.replace('\\boxed{', '');
+      // Remove closing brace if it exists at the end
+      if (content.trim().endsWith('}')) {
+        content = content.trim().slice(0, -1);
+      }
+    }
+    
+    // Remove any other LaTeX artifacts
+    content = content.replace(/\\begin\{.*?\}|\\end\{.*?\}/g, '');
+    
+    return content;
   } catch (error) {
     console.error(`Error generating role document for ${role.title}:`, error);
     // Provide a fallback document if AI generation fails
@@ -92,17 +112,17 @@ async function generateRoleTasks(project: any, role: any): Promise<TaskBreakdown
     // Construct a detailed prompt focused on generating actionable tasks
     const prompt = constructRoleTasksPrompt(project, role);
     
-    // Make the OpenAI API call
+    // Make the OpenAI API call with Deepseek model
     const response = await openai.chat.completions.create({
-      model: "gpt-4-turbo",
+      model: "deepseek/deepseek-r1-zero:free",
       messages: [
         {
           role: "system",
-          content: "You are an expert software project manager with deep technical knowledge across various technologies. Your task is to break down development roles into specific, actionable tasks that can be directly implemented as GitHub issues."
+          content: "You are an expert software project manager with deep technical knowledge across various technologies. Your task is to break down development roles into specific, actionable tasks that can be directly implemented as GitHub issues. Provide responses in clean JSON format without any LaTeX formatting or \\boxed{} wrappers."
         },
         {
           role: "user",
-          content: prompt
+          content: prompt + "\n\nIMPORTANT: Return only a raw JSON object without ANY LaTeX formatting. Do not use \\boxed{} or any other special formatting in your response."
         }
       ],
       temperature: 0.2, // Lower temperature for more consistent, practical output
@@ -110,12 +130,55 @@ async function generateRoleTasks(project: any, role: any): Promise<TaskBreakdown
       response_format: { type: "json_object" } // Request JSON response
     });
     
-    // Extract and parse the JSON response
-    const content = response.choices[0].message.content || '{"tasks": []}';
-    const parsedResponse = JSON.parse(content);
+    // Extract content from response
+    let content = response.choices[0].message.content || '{"tasks": []}';
     
-    // Validate and return the tasks
-    return Array.isArray(parsedResponse.tasks) ? parsedResponse.tasks : [];
+    // Remove LaTeX \boxed{} formatting if present
+    if (content.includes('\\boxed{')) {
+      console.log('LaTeX formatting detected, cleaning response...');
+      content = content.replace('\\boxed{', '');
+      // Remove closing brace if it exists at the end
+      if (content.trim().endsWith('}')) {
+        content = content.trim().slice(0, -1);
+      }
+    }
+    
+    // Remove any other LaTeX artifacts or unwanted characters
+    content = content.replace(/\\begin\{.*?\}|\\end\{.*?\}/g, '');
+    
+    // Ensure we have valid JSON before parsing
+    content = content.trim();
+    if (!content.startsWith('{')) content = '{' + content;
+    if (!content.endsWith('}')) content = content + '}';
+    
+    console.log('Cleaned JSON for parsing:', content.substring(0, 100) + '...');
+    
+    // Try to parse the JSON
+    try {
+      const parsedResponse = JSON.parse(content);
+      
+      // Validate and return the tasks
+      return Array.isArray(parsedResponse.tasks) ? parsedResponse.tasks : [];
+    } catch (parseError) {
+      console.error('Error parsing JSON response:', parseError);
+      console.error('Original content:', content);
+      
+      // Try a more aggressive cleanup if first attempt failed
+      try {
+        // Extract content between first { and last }
+        const matches = content.match(/\{([\s\S]*)\}/);
+        if (matches && matches[0]) {
+          const extractedJson = matches[0];
+          const parsedResponse = JSON.parse(extractedJson);
+          return Array.isArray(parsedResponse.tasks) ? parsedResponse.tasks : [];
+        }
+      } catch (secondError) {
+        console.error('Second attempt to parse JSON failed:', secondError);
+      }
+      
+      // If all parsing attempts fail, return fallback tasks
+      return generateFallbackRoleTasks(project, role);
+    }
   } catch (error) {
     console.error(`Error generating role tasks for ${role.title}:`, error);
     // Provide fallback tasks if AI generation fails

@@ -388,6 +388,7 @@ Return the enhanced project in this exact JSON format:
       
       const enhancedData = JSON.parse(cleanedResponse);
       
+      console.log('AI Enhancement response:', JSON.stringify(enhancedData, null, 2));
       // Merge the enhanced data with the original, prioritizing original values where they exist
       const mergedData = {
         title: projectData.title || enhancedData.title,
@@ -403,10 +404,21 @@ Return the enhanced project in this exact JSON format:
           additional: enhancedData.features?.additional || projectData.features?.additional || []
         },
         teamStructure: {
-          roles: mergeRoles(projectData.teamStructure?.roles || [], enhancedData.teamStructure?.roles || [])
+          roles: enhancedData.teamStructure?.roles?.map((role, index) => {
+            // If there's a matching original role, preserve its title
+            const originalRole = projectData.teamStructure?.roles?.[index];
+            return {
+              title: originalRole?.title || role.title,
+              skills: role.skills || originalRole?.skills || [],
+              responsibilities: role.responsibilities || originalRole?.responsibilities || [],
+              filled: false
+            };
+          }) || []
         },
         learningOutcomes: enhancedData.learningOutcomes || projectData.learningOutcomes || []
       };
+      
+      console.log('Merged enhancement data:', JSON.stringify(mergedData, null, 2));
       
       return mergedData;
     } catch (parseError) {
