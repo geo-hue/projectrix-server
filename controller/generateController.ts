@@ -3,8 +3,7 @@ import { CatchAsyncError } from '../middleware/catchAsyncErrors';
 import ErrorHandler from '../utils/ErrorHandler';
 import { redis } from '../utils/redis';
 import OpenAI from 'openai';
-import GeneratedProject from '../models/generateProject.model';
-import { verifyFirebaseToken } from '../utils/fbauth';
+import GeneratedProject from '../models/generateProject.model'; 
 import User from '../models/userModel';
 import {
   createProjectGeneratedActivity,
@@ -12,9 +11,15 @@ import {
   createProjectPublishedActivity
 } from '../utils/activityUtils';
 import { canEditProject, checkPublishLimit, incrementPublishedProjects } from '../utils/pricingUtils';
+import { checkEnhancementsLimit, decrementEnhancements } from '../utils/pricingUtils';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY, 
+  defaultHeaders: {
+    "HTTP-Referer": process.env.FRONTEND_URL || "https://projectrix.vercel.app",
+    "X-Title": "Projectrix"
+  }
 });
 
 /**
@@ -30,9 +35,9 @@ function getOptimizedPrompt(preferences: any) {
                       'long-term (3+ months)';
   
   // Generate team size text
-  const teamSizeText = teamSize === 'solo' ? 'one developer' : 
-                      teamSize === 'small' ? '2-3 team members' : 
-                      '4-6 team members';
+  const teamSizeText = teamSize === 'solo' ? 'exactly one developer' : 
+  teamSize === 'small' ? 'exactly 2-3 team members, no more and no less' : 
+  'exactly 4-6 team members, no more and no less';
   
   // Format technologies list if provided
   const techList = technologies && technologies.length > 0 
@@ -53,6 +58,12 @@ function getOptimizedPrompt(preferences: any) {
 ${themeContext}
 
 ${categoryGuidance}
+
+IMPORTANT CONSTRAINTS:
+1. If the specified team size is 2-3 members, provide either 2 or 3 team roles, not more and not less.
+2. If the specified team size is 4-6 members, provide between 4 and 6 team roles, not more and not less.
+3. For solo projects, provide exactly 1 role.
+4. Do not exceed the maximum number of roles for the specified team size under any circumstance.
 
 Make sure the project is:
 1. Practical and realistic to implement within the given timeframe and team size
@@ -349,13 +360,13 @@ Return the enhanced project in this exact JSON format:
     console.log('\n📡 Sending enhancement request to OpenAI...');
     
     const completion = await openai.chat.completions.create({
-      model: "gpt-4-turbo",
+      model: "deepseek/deepseek-r1-zero:free",
       messages: [{
         role: "system",
-        content: "You are an expert software architect and creative project planner. Your role is to enhance user-submitted project details while maintaining the original concept and intent."
+        content: "You are an expert software architect and creative project planner. Your role is to enhance user-submitted project details while maintaining the original concept and intent. Return responses as raw JSON without LaTeX formatting like \\boxed{}."
       }, {
         role: "user",
-        content: enhancementPrompt
+        content: enhancementPrompt + "\n\nIMPORTANT: Return a raw JSON object without any LaTeX formatting such as \\boxed{}."
       }],
       temperature: 0.5, // Lower temperature for more consistent enhancements
       max_tokens: 2500,
@@ -365,7 +376,17 @@ Return the enhanced project in this exact JSON format:
     console.log('\n✨ Enhancement response received');
     
     try {
-      const enhancedData = JSON.parse(completion.choices[0].message.content || "{}");
+      // Check if completion and choices exist before accessing
+      if (!completion || !completion.choices || completion.choices.length === 0) {
+        console.error('Empty or invalid completion response:', completion);
+        return projectData;
+      }
+      
+      const responseContent = completion.choices[0].message.content || "{}";
+      // Clean the response to get valid JSON
+      const cleanedResponse = cleanDeepSeekResponse(responseContent);
+      
+      const enhancedData = JSON.parse(cleanedResponse);
       
       // Merge the enhanced data with the original, prioritizing original values where they exist
       const mergedData = {
@@ -452,6 +473,58 @@ function mergeRoles(originalRoles: any[], enhancedRoles: any[]): any[] {
   return mergedRoles;
 }
 
+// Add this function to clean the response from DeepSeek
+function cleanDeepSeekResponse(response: string): string {
+  // Remove LaTeX box formatting if present
+  if (response.startsWith('\\boxed{') && response.endsWith('}')) {
+    response = response.substring(7, response.length - 1);
+  }
+  
+  // Remove other LaTeX markers if present
+  response = response.replace(/\\begin\{.*?\}|\\end\{.*?\}/g, '');
+  
+  // Clean up any other non-JSON elements
+  try {
+    // Test if it's valid JSON
+    JSON.parse(response);
+    return response;
+  } catch (e) {
+    // Try to extract JSON if wrapped in other text
+    const jsonMatch = response.match(/(\{[\s\S]*\})/);
+    if (jsonMatch && jsonMatch[1]) {
+      try {
+        JSON.parse(jsonMatch[1]);
+        return jsonMatch[1];
+      } catch (e) {
+        // Still not valid, do additional cleaning
+      }
+    }
+    
+    // More aggressive cleaning - remove all non-JSON characters outside quotes
+    let inString = false;
+    let cleanedResponse = '';
+    
+    for (let i = 0; i < response.length; i++) {
+      const char = response[i];
+      
+      // Track if we're inside a string
+      if (char === '"' && (i === 0 || response[i-1] !== '\\')) {
+        inString = !inString;
+      }
+      
+      // Keep all characters inside strings, and only specific characters outside
+      if (inString || /[\{\}\[\]:,0-9.\-truefalsnul"]/.test(char)) {
+        cleanedResponse += char;
+      } else if (/\s/.test(char)) {
+        // Keep whitespace
+        cleanedResponse += char;
+      }
+    }
+    
+    return cleanedResponse;
+  }
+}
+
 export const generateProject = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
     console.log('\n🚀 Starting project generation with AI...');
@@ -488,13 +561,13 @@ export const generateProject = CatchAsyncError(async (req: Request, res: Respons
 
     console.log('\n📡 Sending request to OpenAI...');
     const completion = await openai.chat.completions.create({
-      model: "gpt-4-turbo", // Using the latest model for best results
+      model: "deepseek/deepseek-r1-zero:free",
       messages: [{
         role: "system",
-        content: "You are an expert software architect and creative project planner. Your role is to generate detailed, innovative, and practical software project ideas based on user requirements."
+        content: "You are an expert software architect and creative project planner. Your role is to generate detailed, innovative, and practical software project ideas based on user requirements. Return responses as raw JSON without LaTeX formatting like \\boxed{}."
       }, {
         role: "user",
-        content: prompt
+        content: prompt + "\n\nIMPORTANT: Return a raw JSON object without any LaTeX formatting such as \\boxed{}."
       }],
       temperature: 0.7,
       max_tokens: 2500,
@@ -504,8 +577,19 @@ export const generateProject = CatchAsyncError(async (req: Request, res: Respons
     console.log('\n✨ OpenAI Response received');
     let projectData;
     
+    console.log('Completion response structure:', JSON.stringify(completion, null, 2));
+
     try {
-      projectData = JSON.parse(completion.choices[0].message.content || "{}");
+       // Check if completion and choices exist before accessing
+  if (!completion || !completion.choices || completion.choices.length === 0) {
+    console.error('Empty or invalid completion response:', completion);
+    return next(new ErrorHandler("Failed to get a valid response from the AI. Please try again.", 500));
+  }
+      const responseContent = completion.choices[0].message.content || "{}";
+      // Clean the response to get valid JSON
+      const cleanedResponse = cleanDeepSeekResponse(responseContent);
+      
+      projectData = JSON.parse(cleanedResponse);
       
       // Validate that the response has all required fields
       const requiredFields = ["title", "subtitle", "description", "features", "teamStructure", "learningOutcomes"];
@@ -523,6 +607,17 @@ export const generateProject = CatchAsyncError(async (req: Request, res: Respons
       if (!projectData.teamStructure.roles || !Array.isArray(projectData.teamStructure.roles)) {
         throw new Error("Invalid team structure");
       }
+
+      const roles = projectData.teamStructure?.roles || [];
+      const roleCount = roles.length;
+      
+      if (
+        (teamSize === 'solo' && roleCount !== 1) ||
+        (teamSize === 'small' && (roleCount < 2 || roleCount > 3)) ||
+        (teamSize === 'medium' && (roleCount < 4 || roleCount > 6))
+      ) {
+        console.warn(`Team size constraint violated: Expected ${teamSize} but got ${roleCount} roles`);}
+      
     } catch (parseError) {
       console.error('Error parsing or validating OpenAI response:', parseError);
       return next(new ErrorHandler("Failed to generate a valid project. Please try again.", 500));
@@ -598,9 +693,10 @@ export const generateProject = CatchAsyncError(async (req: Request, res: Respons
       success: true,
       project,
     });
-  } catch (error: any) {
-    console.log('\n❌ Error in project generation:', error);
-    return next(new ErrorHandler(error.message, 500));
+  } catch (parseError) {
+    console.error('Error parsing or validating OpenAI response:', parseError);
+    console.log('Raw response:', completion.choices[0].message.content);
+    return next(new ErrorHandler("Failed to generate a valid project. Please try again.", 500));
   }
 });
 export const getGeneratedProjects = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
@@ -655,13 +751,13 @@ export const generateAnother = CatchAsyncError(async (req: Request, res: Respons
     
     console.log('\n📡 Sending request to OpenAI...');
     const completion = await openai.chat.completions.create({
-      model: "gpt-4-turbo",
+      model: "deepseek/deepseek-r1-zero:free",
       messages: [{
         role: "system",
-        content: "You are an expert software architect and creative project planner. Your role is to generate detailed, innovative, and practical software project ideas based on user requirements. Create a different project than what might have been generated before."
+        content: "You are an expert software architect and creative project planner. Your role is to generate detailed, innovative, and practical software project ideas based on user requirements. Create a different project than what might have been generated before. Return responses as raw JSON without LaTeX formatting like \\boxed{}."
       }, {
         role: "user",
-        content: prompt
+        content: prompt + "\n\nIMPORTANT: Return a raw JSON object without any LaTeX formatting such as \\boxed{}."
       }],
       temperature: 0.8, // Slightly higher temperature for more variation
       max_tokens: 2500,
@@ -672,7 +768,17 @@ export const generateAnother = CatchAsyncError(async (req: Request, res: Respons
     let projectData;
     
     try {
-      projectData = JSON.parse(completion.choices[0].message.content || "{}");
+      // Check if completion and choices exist before accessing
+      if (!completion || !completion.choices || completion.choices.length === 0) {
+        console.error('Empty or invalid completion response:', completion);
+        return next(new ErrorHandler("Failed to get a valid response from the AI. Please try again.", 500));
+      }
+      
+      const responseContent = completion.choices[0].message.content || "{}";
+      // Clean the response to get valid JSON
+      const cleanedResponse = cleanDeepSeekResponse(responseContent);
+      
+      projectData = JSON.parse(cleanedResponse);
       
       // Validate that the response has all required fields
       const requiredFields = ["title", "subtitle", "description", "features", "teamStructure", "learningOutcomes"];
@@ -902,17 +1008,38 @@ export const publishProject = CatchAsyncError(async (req: Request, res: Response
 
 export const submitUserProject = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
-    console.log('\n🚀 Starting user project submission with AI enhancement...');
+    console.log('\n🚀 Starting user project submission...');
     const projectData = req.body;
     const user = req.user;
+    const useEnhancement = req.body.useEnhancement === true;
 
-    // Check if the project needs AI enhancement
-    const needsEnhancement = shouldEnhanceProject(projectData);
+    // Check if the project needs and should use AI enhancement
     let enhancedData = { ...projectData };
+    let wasEnhanced = false;
 
-    if (needsEnhancement) {
-      console.log('📝 Project needs enhancement, calling AI...');
-      enhancedData = await enhanceProjectWithAI(projectData);
+    if (useEnhancement) {
+      console.log('🔍 Enhancement requested. Checking limits...');
+      
+      // Check if user has enhancements left
+      const hasEnhancementsLeft = await checkEnhancementsLimit(user._id.toString());
+      if (!hasEnhancementsLeft) {
+        return next(new ErrorHandler("No enhancements left. Pro users get 8 enhancements per month, while free users get 2.", 403));
+      }
+      
+      // Now check if the project would benefit from enhancement
+      const needsEnhancement = shouldEnhanceProject(projectData);
+      
+      if (needsEnhancement) {
+        console.log('📝 Project needs enhancement, calling AI...');
+        enhancedData = await enhanceProjectWithAI(projectData);
+        wasEnhanced = true;
+        
+        // Decrement user's enhancement count
+        await decrementEnhancements(user._id.toString());
+        console.log(`User's enhancements decremented. AI enhancement applied.`);
+      } else {
+        console.log('✅ Project is already well-defined. Enhancement not necessary.');
+      }
     }
 
     // Determine complexity level based on percentage
@@ -963,11 +1090,12 @@ export const submitUserProject = CatchAsyncError(async (req: Request, res: Respo
       },
       learningOutcomes: enhancedData.learningOutcomes?.filter((outcome: string) => outcome.trim()) || [],
       isSaved: true, // Auto-save user submitted projects
-      isPublished: false // Not published by default
+      isPublished: false, // Not published by default
+      wasEnhanced: wasEnhanced // Add this flag to track if project was enhanced
     };
 
     // Log the data being saved
-    console.log('\n📝 User project data to be saved:', JSON.stringify(formattedData, null, 2));
+    console.log('\n📝 User project data to be saved', wasEnhanced ? ' (AI enhanced)' : '');
 
     // Create project in database
     console.log('\n💾 Saving to database...');
@@ -1002,6 +1130,7 @@ export const submitUserProject = CatchAsyncError(async (req: Request, res: Respo
     res.status(201).json({
       success: true,
       project,
+      wasEnhanced: wasEnhanced
     });
   } catch (error: any) {
     console.log('\n❌ Error in user project submission:', error);

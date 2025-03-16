@@ -49,6 +49,7 @@ export interface IGeneratedProject extends Document {
   };
   teamStructure: TeamStructure;
   teamMembers?: TeamMember[];
+  wasEnhanced?: boolean;
   learningOutcomes: string[];
   isSaved: boolean;
   isPublished: boolean;
@@ -118,6 +119,10 @@ const generatedProjectSchema = new Schema<IGeneratedProject>({
   category: {
     type: String,
     required: true
+  },
+  wasEnhanced: {
+    type: Boolean,
+    default: false
   },
   features: {
     core: [{

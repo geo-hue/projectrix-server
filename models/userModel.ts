@@ -38,6 +38,7 @@ export interface IUser extends Document {
   newsletterSubscribed: boolean; 
   emailVerified: boolean; 
   lastEmailSent?: Date; 
+  enhancementsLeft: number;
   comparePassword(password: string): Promise<boolean>;
   SignAccessToken(): string;
   SignRefreshToken(): string;
@@ -115,6 +116,10 @@ const userSchema: Schema<IUser> = new mongoose.Schema({
   projectIdeasLeft: {
     type: Number,
     default: 3
+  },
+  enhancementsLeft: {
+    type: Number,
+    default: 2 // Default for free users
   },
   collaborationRequestsLeft: { 
     type: Number,

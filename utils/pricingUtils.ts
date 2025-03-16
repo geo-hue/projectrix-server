@@ -89,6 +89,27 @@ export const canEditProject = async (userId: string): Promise<boolean> => {
   return user.plan === 'pro';
 };
 
+/**
+ * Decrement user's enhancements left
+ */
+export const decrementEnhancements = async (userId: string): Promise<void> => {
+  // Don't enforce if pricing isn't enabled
+  if (!isPricingEnabled()) {
+    return;
+  }
+  
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ErrorHandler('User not found', 404);
+  }
+  
+  // Decrement enhancements left
+  if (user.enhancementsLeft > 0) {
+    user.enhancementsLeft -= 1;
+    await user.save();
+  }
+};
+
 // Decrement user's collaboration request limit
 export const decrementCollaborationRequests = async (userId: string): Promise<void> => {
   // Don't enforce if pricing isn't enabled
@@ -112,6 +133,25 @@ export const decrementCollaborationRequests = async (userId: string): Promise<vo
     await user.save();
   }
 };
+
+/**
+ * Check if user has enhancements left
+ */
+export const checkEnhancementsLimit = async (userId: string): Promise<boolean> => {
+  // Don't enforce limit if pricing isn't enabled
+  if (!isPricingEnabled()) {
+    return true;
+  }
+  
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ErrorHandler('User not found', 404);
+  }
+  
+  // Return true if user has enhancements left
+  return user.enhancementsLeft > 0;
+};
+
 
 // Increment user's published project count
 export const incrementPublishedProjects = async (userId: string): Promise<void> => {
@@ -137,10 +177,12 @@ export const initializeUserPlanLimits = (user: any): void => {
   
     user.projectIdeasLeft = 10;
     user.collaborationRequestsLeft = 999999; // Effectively unlimited
+    user.enhancementsLeft = 8;   // Pro users get 8 enhancements
   } else {
-    // Free users get 3 project ideas and 3 collaboration requests per month
+    // Free users get 3 project ideas and 3 collaboration requests and 2 enhancements per month
     user.projectIdeasLeft = 3;
     user.collaborationRequestsLeft = 3;
+    user.enhancementsLeft = 2;
   }
 };
 
@@ -151,9 +193,15 @@ export const resetMonthlyLimits = async (userId: string): Promise<void> => {
     throw new ErrorHandler('User not found', 404);
   }
   
-  if (user.plan === 'free') {
+  if (user.plan === 'pro') {
+    user.projectIdeasLeft = 10;
+    user.collaborationRequestsLeft = 999999; // Effectively unlimited
+    user.enhancementsLeft = 8;
+  } else {
     user.projectIdeasLeft = 3;
     user.collaborationRequestsLeft = 3;
-    await user.save();
+    user.enhancementsLeft = 2;
   }
+  
+  await user.save();
 };
