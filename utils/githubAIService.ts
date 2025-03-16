@@ -133,47 +133,69 @@ async function generateRoleTasks(project: any, role: any): Promise<TaskBreakdown
     // Extract content from response
     let content = response.choices[0].message.content || '{"tasks": []}';
     
-    // Remove LaTeX \boxed{} formatting if present
-    if (content.includes('\\boxed{')) {
-      console.log('LaTeX formatting detected, cleaning response...');
-      content = content.replace('\\boxed{', '');
-      // Remove closing brace if it exists at the end
-      if (content.trim().endsWith('}')) {
-        content = content.trim().slice(0, -1);
-      }
-    }
-    
-    // Remove any other LaTeX artifacts or unwanted characters
-    content = content.replace(/\\begin\{.*?\}|\\end\{.*?\}/g, '');
-    
-    // Ensure we have valid JSON before parsing
-    content = content.trim();
-    if (!content.startsWith('{')) content = '{' + content;
-    if (!content.endsWith('}')) content = content + '}';
-    
-    console.log('Cleaned JSON for parsing:', content.substring(0, 100) + '...');
-    
-    // Try to parse the JSON
     try {
+      // First, try direct parsing
       const parsedResponse = JSON.parse(content);
-      
-      // Validate and return the tasks
       return Array.isArray(parsedResponse.tasks) ? parsedResponse.tasks : [];
     } catch (parseError) {
       console.error('Error parsing JSON response:', parseError);
-      console.error('Original content:', content);
       
-      // Try a more aggressive cleanup if first attempt failed
-      try {
-        // Extract content between first { and last }
-        const matches = content.match(/\{([\s\S]*)\}/);
-        if (matches && matches[0]) {
-          const extractedJson = matches[0];
+      // Try extracting JSON with a regular expression
+      const jsonMatch = content.match(/(\{[\s\S]*\})/);
+      if (jsonMatch && jsonMatch[1]) {
+        try {
+          const extractedJson = jsonMatch[1];
           const parsedResponse = JSON.parse(extractedJson);
           return Array.isArray(parsedResponse.tasks) ? parsedResponse.tasks : [];
+        } catch (secondError) {
+          console.error('Second attempt to parse JSON failed:', secondError);
         }
-      } catch (secondError) {
-        console.error('Second attempt to parse JSON failed:', secondError);
+      }
+      
+      // If everything fails, try to fix the JSON programmatically
+      try {
+        // Find where the tasks array starts and ends
+        const tasksStartIdx = content.indexOf('"tasks"');
+        if (tasksStartIdx > -1) {
+          const arrayStartIdx = content.indexOf('[', tasksStartIdx);
+          if (arrayStartIdx > -1) {
+            // Find all task objects
+            const taskObjects = [];
+            let bracketCount = 0;
+            let currentObject = '';
+            let inObject = false;
+            
+            for (let i = arrayStartIdx + 1; i < content.length; i++) {
+              const char = content[i];
+              
+              if (char === '{') {
+                bracketCount++;
+                inObject = true;
+                currentObject += char;
+              } else if (char === '}') {
+                bracketCount--;
+                currentObject += char;
+                
+                if (bracketCount === 0 && inObject) {
+                  taskObjects.push(JSON.parse(currentObject));
+                  currentObject = '';
+                  inObject = false;
+                }
+              } else if (inObject) {
+                currentObject += char;
+              }
+              
+              // Break if we found the end of the array
+              if (char === ']' && bracketCount === 0 && !inObject) {
+                break;
+              }
+            }
+            
+            return taskObjects;
+          }
+        }
+      } catch (thirdError) {
+        console.error('Third attempt to parse JSON failed:', thirdError);
       }
       
       // If all parsing attempts fail, return fallback tasks

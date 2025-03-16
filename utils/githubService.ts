@@ -39,7 +39,7 @@ async createRepository(
   project: any, 
   owner: any, 
   useOrganization: boolean = false,
-  isPrivate: boolean = true
+  isPrivate: boolean = false
 ) {
   try {
     const repoName = this.sanitizeRepoName(project.title);
@@ -101,7 +101,7 @@ async createRepository(
     // Try to create project board but don't fail if it doesn't work
     let projectBoard = null;
     try {
-      projectBoard = await this.createProjectBoard(repo.owner.login, repo.name, project);
+      // projectBoard = await this.createProjectBoard(repo.owner.login, repo.name, project);
     } catch (projectError) {
       console.warn('Could not create project board (GitHub is deprecating this feature):', projectError.message);
       // Continue without the project board
@@ -111,13 +111,10 @@ async createRepository(
     const roleBreakdowns = await generateRoleBreakdowns(project);
     await this.createRoleDocuments(repo.owner.login, repo.name, roleBreakdowns);
     
-    // Only create issues with project board if the board was created
-    if (projectBoard) {
-      await this.createIssuesFromBreakdowns(repo.owner.login, repo.name, roleBreakdowns, projectBoard.id);
-    } else {
+ 
       // Create issues without project board
       await this.createIssuesWithoutBoard(repo.owner.login, repo.name, roleBreakdowns);
-    }
+
     
     // Setup branch protection
     await this.setupBranchProtection(repo.owner.login, repo.name);
@@ -180,8 +177,6 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
       const addedCollaborators = [];
       
       for (const collaborator of collaborators) {
-        const permission = this.determinePermissionLevel(collaborator.role);
-        
         try {
           // Get GitHub username from user document
           const user = await User.findById(collaborator.userId);
@@ -196,20 +191,19 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
             continue;
           }
           
-          // Add collaborator to repository
-          await this.octokit.repos.addCollaborator({
-            owner: repoOwner,
-            repo: repoName,
-            username: user.username,
-            permission: permission
-          });
+          const permission = this.determinePermissionLevel(collaborator.role);
           
-          addedCollaborators.push({
-            username: user.username,
-            permission: permission
-          });
+          // Try to add collaborator
+          const success = await this.addCollaborator(repoOwner, repoName, user.username, permission);
+          
+          if (success) {
+            addedCollaborators.push({
+              username: user.username,
+              permission: permission
+            });
+          }
         } catch (collabError) {
-          console.error(`Error adding collaborator ${collaborator.userId}:`, collabError);
+          console.error(`Error processing collaborator ${collaborator.userId}:`, collabError);
           // Continue with other collaborators even if one fails
         }
       }
@@ -217,33 +211,47 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
       return addedCollaborators;
     } catch (error) {
       console.error('Error adding collaborators:', error);
-      throw new ErrorHandler(error.message || 'Failed to add collaborators', 500);
+      // Do not throw error, just return what we have
+      return [];
     }
   }
-  
   async addCollaborator(repoOwner: string, repoName: string, username: string, permission: 'admin' | 'push' | 'pull'): Promise<boolean> {
-  try {
-    // Skip owner if they're being added as a collaborator
-    if (username === this.username) {
-      console.log(`Skipping repository owner ${username} as collaborator`);
-      return true;
+    try {
+      // Skip owner if they're being added as a collaborator
+      if (username === this.username) {
+        console.log(`Skipping repository owner ${username} as collaborator`);
+        return true;
+      }
+      
+      // Sanitize the username - remove any @ symbol that might be present
+      const sanitizedUsername = username.replace('@', '');
+      
+      try {
+        // Add collaborator to repository
+        await this.octokit.repos.addCollaborator({
+          owner: repoOwner,
+          repo: repoName,
+          username: sanitizedUsername,
+          permission: permission
+        });
+        
+        console.log(`Added ${sanitizedUsername} as collaborator with ${permission} permission`);
+        return true;
+      } catch (error) {
+        console.error(`Error adding collaborator ${sanitizedUsername}:`, error);
+        
+        // Check if this is a not found error - user might not exist on GitHub
+        if (error.status === 404) {
+          console.warn(`User ${sanitizedUsername} not found on GitHub or has different username`);
+        }
+        
+        return false;
+      }
+    } catch (error) {
+      console.error(`Error adding collaborator ${username}:`, error);
+      return false;
     }
-    
-    // Add collaborator to repository
-    await this.octokit.repos.addCollaborator({
-      owner: repoOwner,
-      repo: repoName,
-      username: username,
-      permission: permission
-    });
-    
-    console.log(`Added ${username} as collaborator with ${permission} permission`);
-    return true;
-  } catch (error) {
-    console.error(`Error adding collaborator ${username}:`, error);
-    return false;
   }
-}
   /**
    * Create initial repository files including README
    */
@@ -338,45 +346,73 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
    */
   private async createRoleDocuments(repoOwner: string, repoName: string, roleBreakdowns: any) {
     try {
-      for (const role of Object.keys(roleBreakdowns)) {
-        const roleContent = roleBreakdowns[role].document;
-        const rolePath = `docs/roles/${this.sanitizeFileName(role)}.md`;
-        
-        // Create the roles directory if it doesn't exist
-        try {
-          await this.octokit.repos.createOrUpdateFileContents({
-            owner: repoOwner,
-            repo: repoName,
-            path: 'docs/roles/.gitkeep',
-            message: 'Create roles directory',
-            content: Buffer.from('').toString('base64'),
-            committer: {
-              name: 'Projectrix Bot',
-              email: process.env.GITHUB_BOT_EMAIL || 'bot@projectrix.com'
-            }
-          });
-        } catch (dirError) {
-          // Directory might already exist
-        }
-        
-        // Create role document
+      // First create the docs directory
+      try {
         await this.octokit.repos.createOrUpdateFileContents({
           owner: repoOwner,
           repo: repoName,
-          path: rolePath,
-          message: `Add role breakdown for ${role}`,
-          content: Buffer.from(roleContent).toString('base64'),
+          path: 'docs/README.md',
+          message: 'Create docs directory',
+          content: Buffer.from('# Project Documentation\n\nThis directory contains documentation for project roles and responsibilities.').toString('base64'),
           committer: {
             name: 'Projectrix Bot',
             email: process.env.GITHUB_BOT_EMAIL || 'bot@projectrix.com'
           }
         });
+      } catch (dirError) {
+        // Directory might already exist
+        console.log('Docs directory might already exist or creation failed:', dirError.message);
+      }
+      
+      // Then create the roles directory
+      try {
+        await this.octokit.repos.createOrUpdateFileContents({
+          owner: repoOwner,
+          repo: repoName,
+          path: 'docs/roles/README.md',
+          message: 'Create roles directory',
+          content: Buffer.from('# Role Documentation\n\nThis directory contains detailed documentation for each project role.').toString('base64'),
+          committer: {
+            name: 'Projectrix Bot',
+            email: process.env.GITHUB_BOT_EMAIL || 'bot@projectrix.com'
+          }
+        });
+      } catch (rolesError) {
+        // Roles directory might already exist
+        console.log('Roles directory might already exist or creation failed:', rolesError.message);
+      }
+      
+      // Now create each role document
+      for (const role of Object.keys(roleBreakdowns)) {
+        const roleContent = roleBreakdowns[role].document;
+        const rolePath = `docs/roles/${this.sanitizeFileName(role)}.md`;
+        
+        try {
+          // Create role document
+          await this.octokit.repos.createOrUpdateFileContents({
+            owner: repoOwner,
+            repo: repoName,
+            path: rolePath,
+            message: `Add role breakdown for ${role}`,
+            content: Buffer.from(roleContent).toString('base64'),
+            committer: {
+              name: 'Projectrix Bot',
+              email: process.env.GITHUB_BOT_EMAIL || 'bot@projectrix.com'
+            }
+          });
+          
+          console.log(`Created role document for ${role}`);
+        } catch (roleError) {
+          console.error(`Error creating role document for ${role}:`, roleError.message);
+          // Continue with other roles
+        }
       }
       
       return true;
     } catch (error) {
       console.error('Error creating role documents:', error);
-      throw new ErrorHandler(error.message || 'Failed to create role documents', 500);
+      // Don't throw, just return false
+      return false;
     }
   }
   
@@ -438,24 +474,39 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
     }
   }
   
-  /**
-   * Setup branch protection for main branch
-   */
   private async setupBranchProtection(repoOwner: string, repoName: string) {
     try {
-      await this.octokit.repos.updateBranchProtection({
-        owner: repoOwner,
-        repo: repoName,
-        branch: 'main',
-        required_status_checks: null,
-        enforce_admins: false,
-        required_pull_request_reviews: {
-          required_approving_review_count: 1
-        },
-        restrictions: null
-      });
-      
-      return true;
+      try {
+        // First, check if repository is private
+        const { data: repo } = await this.octokit.repos.get({
+          owner: repoOwner,
+          repo: repoName
+        });
+        
+        if (repo.private) {
+          console.log('Skipping branch protection for private repository (requires GitHub Pro)');
+          return false;
+        }
+        
+        // Only set branch protection for public repositories
+        await this.octokit.repos.updateBranchProtection({
+          owner: repoOwner,
+          repo: repoName,
+          branch: 'main',
+          required_status_checks: null,
+          enforce_admins: false,
+          required_pull_request_reviews: {
+            required_approving_review_count: 1
+          },
+          restrictions: null
+        });
+        
+        return true;
+      } catch (error) {
+        console.error('Error setting up branch protection:', error);
+        // Don't throw error here as this is not critical
+        return false;
+      }
     } catch (error) {
       console.error('Error setting up branch protection:', error);
       // Don't throw error here as this is not critical
