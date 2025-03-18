@@ -35,7 +35,35 @@ export const githubAuth = CatchAsyncError(async (req: Request, res: Response, ne
       } = decodedToken;
       
       // Use email username or a fallback if none exists
-      const username = email ? email.split('@')[0] : `user_${githubId.substring(0, 8)}`;
+      let username = email ? email.split('@')[0] : `user_${githubId.substring(0, 8)}`;
+
+      // Important: Get the actual GitHub username by making a request to GitHub API
+      let githubUsername = username;
+      
+      // Get GitHub identity from Firebase
+      const githubIdentities = decodedToken.firebase?.identities?.['github.com'];
+      if (githubIdentities && githubIdentities.length > 0) {
+        // Try to get the actual GitHub username
+        try {
+          // Get the GitHub user ID from Firebase identities
+          const githubUserId = githubIdentities[0];
+          
+          // Make a request to GitHub API to get the username
+          const githubUserResponse = await axios.get(`https://api.github.com/user/${githubUserId}`, {
+            headers: {
+              Accept: 'application/vnd.github.v3+json',
+            }
+          });
+          
+          if (githubUserResponse.data && githubUserResponse.data.login) {
+            githubUsername = githubUserResponse.data.login;
+            console.log(`Fetched GitHub username: ${githubUsername}`);
+          }
+        } catch (githubError) {
+          console.error('Error fetching GitHub username:', githubError);
+          // Continue with the default username if GitHub API call fails
+        }
+      }
 
       // Check if user already exists
       let user = await User.findOne({ githubId });
@@ -48,20 +76,21 @@ export const githubAuth = CatchAsyncError(async (req: Request, res: Response, ne
         const userData = {
           name: displayName || username,
           email: email || `${username}@github.com`,
-          avatar: photoURL || `https://avatars.githubusercontent.com/${username}`,
+          avatar: photoURL || `https://avatars.githubusercontent.com/${githubUsername}`,
           githubId,
-          username,
+          username, // This is the local username for our app
+          githubUsername, // Store the actual GitHub username separately - NEW FIELD
           skills: [],
           projectIdeasLeft: 3, // Default number of free projects
           projectsGenerated: 0,
-          publishedProjectsCount: 0, // Initialize published projects count
-          collaborationRequestsLeft: 3, // Initialize collaboration requests
+          publishedProjectsCount: 0, 
+          collaborationRequestsLeft: 3,
           createdAt: new Date(),
           lastLogin: new Date(),
           role: 'user',
-          plan: 'free', // Default to free plan
-          newsletterSubscribed: true, // Subscribe to newsletters by default
-          emailVerified: !!email, // Mark as verified if email exists (from GitHub)
+          plan: 'free',
+          newsletterSubscribed: true,
+          emailVerified: !!email,
         };
         
         // Initialize user plan limits
@@ -83,6 +112,12 @@ export const githubAuth = CatchAsyncError(async (req: Request, res: Response, ne
         }
       } else {
         console.log('Existing user found:', user._id);
+        
+        // Update GitHub username if it has changed or wasn't set before
+        if (!user.githubUsername || user.githubUsername !== githubUsername) {
+          user.githubUsername = githubUsername;
+          console.log(`Updated GitHub username to: ${githubUsername}`);
+        }
         
         await user.save();
       }
@@ -288,6 +323,9 @@ export const refreshToken = CatchAsyncError(async (req: Request, res: Response, 
     // Verify current token
     const decodedToken = await verifyFirebaseToken(token);
     const userId = decodedToken.uid;
+    
+    console.log('Decoded Firebase Token:', decodedToken);
+
     
     // Check if user exists
     const user = await User.findOne({ githubId: userId });

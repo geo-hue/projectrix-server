@@ -4,15 +4,15 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Initialize OpenAI client with OpenRouter configuration
+// Initialize OpenAI client 
 const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY,
   defaultHeaders: {
     "HTTP-Referer": process.env.FRONTEND_URL || "https://projectrix.vercel.app",
     "X-Title": "Projectrix"
   }
 });
+
 
 /**
  * Generate detailed role breakdowns for a project using AI
@@ -63,9 +63,9 @@ async function generateRoleDocument(project: any, role: any): Promise<string> {
     // Construct a detailed prompt that provides full context about the project and role
     const prompt = constructRoleDocumentPrompt(project, role);
     
-    // Make the OpenAI API call with Deepseek model
+    // Make the OpenAI API call 
     const response = await openai.chat.completions.create({
-      model: "deepseek/deepseek-r1-zero:free",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
@@ -73,7 +73,7 @@ async function generateRoleDocument(project: any, role: any): Promise<string> {
         },
         {
           role: "user",
-          content: prompt + "\n\nReturn a well-formatted markdown document without any LaTeX formatting such as \\boxed{}."
+          content: prompt
         }
       ],
       temperature: 0.3, // Lower temperature for more consistent, factual output
@@ -112,17 +112,17 @@ async function generateRoleTasks(project: any, role: any): Promise<TaskBreakdown
     // Construct a detailed prompt focused on generating actionable tasks
     const prompt = constructRoleTasksPrompt(project, role);
     
-    // Make the OpenAI API call with Deepseek model
+    // Make the OpenAI API call
     const response = await openai.chat.completions.create({
-      model: "deepseek/deepseek-r1-zero:free",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: "You are an expert software project manager with deep technical knowledge across various technologies. Your task is to break down development roles into specific, actionable tasks that can be directly implemented as GitHub issues. Provide responses in clean JSON format without any LaTeX formatting or \\boxed{} wrappers."
+          content: "You are an expert software project manager with deep technical knowledge across various technologies. Your task is to break down development roles into specific, actionable tasks that can be directly implemented as GitHub issues. Provide responses in clean JSON format. DO NOT use any LaTeX formatting such as \\boxed{} in your response."
         },
         {
           role: "user",
-          content: prompt + "\n\nIMPORTANT: Return only a raw JSON object without ANY LaTeX formatting. Do not use \\boxed{} or any other special formatting in your response."
+          content: prompt
         }
       ],
       temperature: 0.2, // Lower temperature for more consistent, practical output
@@ -132,6 +132,9 @@ async function generateRoleTasks(project: any, role: any): Promise<TaskBreakdown
     
     // Extract content from response
     let content = response.choices[0].message.content || '{"tasks": []}';
+    
+    // Clean LaTeX formatting more aggressively
+    content = cleanResponseContent(content);
     
     try {
       // First, try direct parsing
@@ -145,60 +148,17 @@ async function generateRoleTasks(project: any, role: any): Promise<TaskBreakdown
       if (jsonMatch && jsonMatch[1]) {
         try {
           const extractedJson = jsonMatch[1];
-          const parsedResponse = JSON.parse(extractedJson);
+          // Clean the extracted JSON further
+          const cleanedJson = cleanResponseContent(extractedJson);
+          
+          const parsedResponse = JSON.parse(cleanedJson);
           return Array.isArray(parsedResponse.tasks) ? parsedResponse.tasks : [];
         } catch (secondError) {
           console.error('Second attempt to parse JSON failed:', secondError);
         }
       }
       
-      // If everything fails, try to fix the JSON programmatically
-      try {
-        // Find where the tasks array starts and ends
-        const tasksStartIdx = content.indexOf('"tasks"');
-        if (tasksStartIdx > -1) {
-          const arrayStartIdx = content.indexOf('[', tasksStartIdx);
-          if (arrayStartIdx > -1) {
-            // Find all task objects
-            const taskObjects = [];
-            let bracketCount = 0;
-            let currentObject = '';
-            let inObject = false;
-            
-            for (let i = arrayStartIdx + 1; i < content.length; i++) {
-              const char = content[i];
-              
-              if (char === '{') {
-                bracketCount++;
-                inObject = true;
-                currentObject += char;
-              } else if (char === '}') {
-                bracketCount--;
-                currentObject += char;
-                
-                if (bracketCount === 0 && inObject) {
-                  taskObjects.push(JSON.parse(currentObject));
-                  currentObject = '';
-                  inObject = false;
-                }
-              } else if (inObject) {
-                currentObject += char;
-              }
-              
-              // Break if we found the end of the array
-              if (char === ']' && bracketCount === 0 && !inObject) {
-                break;
-              }
-            }
-            
-            return taskObjects;
-          }
-        }
-      } catch (thirdError) {
-        console.error('Third attempt to parse JSON failed:', thirdError);
-      }
-      
-      // If all parsing attempts fail, return fallback tasks
+      // If everything fails, return fallback tasks
       return generateFallbackRoleTasks(project, role);
     }
   } catch (error) {
@@ -206,6 +166,57 @@ async function generateRoleTasks(project: any, role: any): Promise<TaskBreakdown
     // Provide fallback tasks if AI generation fails
     return generateFallbackRoleTasks(project, role);
   }
+}
+
+/**
+ * Clean response content from LaTeX formatting and other non-JSON elements
+ */
+function cleanResponseContent(content: string): string {
+  // Step 1: Remove LaTeX \boxed formatting
+  if (content.includes('\\boxed{')) {
+    console.log('LaTeX \\boxed formatting detected, cleaning...');
+    // Remove opening \boxed{
+    content = content.replace(/\\boxed\{/g, '');
+    
+    // Count opening and closing braces to find the matching closing brace
+    let braceCount = 0;
+    let cleanedContent = '';
+    let inBoxed = false;
+    
+    for (let i = 0; i < content.length; i++) {
+      const char = content[i];
+      
+      if (char === '{') {
+        braceCount++;
+        cleanedContent += char;
+      } else if (char === '}') {
+        braceCount--;
+        // Skip the closing brace of the \boxed command when braceCount becomes negative
+        if (braceCount >= 0) {
+          cleanedContent += char;
+        } else {
+          inBoxed = true; // We've found the closing brace of \boxed
+        }
+      } else {
+        cleanedContent += char;
+      }
+    }
+    
+    content = inBoxed ? cleanedContent : content;
+  }
+  
+  // Step 2: Remove any other LaTeX commands or environments
+  content = content.replace(/\\begin\{.*?\}|\\end\{.*?\}/g, '');
+  content = content.replace(/\\[a-zA-Z]+(\{.*?\})?/g, ''); // Remove other LaTeX commands
+  
+  // Step 3: Fix common JSON formatting issues
+  content = content.replace(/\,(\s*[\}\]])/g, '$1'); // Remove trailing commas
+  
+  // Step 4: Handle any escaped quotes or newlines that might break JSON
+  content = content.replace(/\\"/g, '"'); // Replace escaped quotes
+  content = content.replace(/\\n/g, ' '); // Replace newlines with spaces
+  
+  return content;
 }
 
 /**

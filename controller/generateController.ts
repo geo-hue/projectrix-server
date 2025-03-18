@@ -14,8 +14,7 @@ import { canEditProject, checkPublishLimit, incrementPublishedProjects } from '.
 import { checkEnhancementsLimit, decrementEnhancements } from '../utils/pricingUtils';
 
 const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY, 
+  apiKey: process.env.OPENAI_API_KEY,
   defaultHeaders: {
     "HTTP-Referer": process.env.FRONTEND_URL || "https://projectrix.vercel.app",
     "X-Title": "Projectrix"
@@ -360,13 +359,13 @@ Return the enhanced project in this exact JSON format:
     console.log('\n📡 Sending enhancement request to OpenAI...');
     
     const completion = await openai.chat.completions.create({
-      model: "deepseek/deepseek-r1-zero:free",
+      model: "gpt-4o-mini",
       messages: [{
         role: "system",
         content: "You are an expert software architect and creative project planner. Your role is to enhance user-submitted project details while maintaining the original concept and intent. Return responses as raw JSON without LaTeX formatting like \\boxed{}."
       }, {
         role: "user",
-        content: enhancementPrompt + "\n\nIMPORTANT: Return a raw JSON object without any LaTeX formatting such as \\boxed{}."
+        content: enhancementPrompt
       }],
       temperature: 0.5, // Lower temperature for more consistent enhancements
       max_tokens: 2500,
@@ -573,15 +572,15 @@ export const generateProject = CatchAsyncError(async (req: Request, res: Respons
 
     console.log('\n📡 Sending request to OpenAI...');
     const completion = await openai.chat.completions.create({
-      model: "deepseek/deepseek-r1-zero:free",
+      model: "gpt-4o-mini",
       messages: [{
         role: "system",
         content: "You are an expert software architect and creative project planner. Your role is to generate detailed, innovative, and practical software project ideas based on user requirements. Return responses as raw JSON without LaTeX formatting like \\boxed{}."
       }, {
         role: "user",
-        content: prompt + "\n\nIMPORTANT: Return a raw JSON object without any LaTeX formatting such as \\boxed{}."
+        content: prompt 
       }],
-      temperature: 0.7,
+      temperature: 0.8,
       max_tokens: 2500,
       response_format: { type: "json_object" }
     });
@@ -763,13 +762,13 @@ export const generateAnother = CatchAsyncError(async (req: Request, res: Respons
     
     console.log('\n📡 Sending request to OpenAI...');
     const completion = await openai.chat.completions.create({
-      model: "deepseek/deepseek-r1-zero:free",
+      model: "gpt-4o-mini",
       messages: [{
         role: "system",
         content: "You are an expert software architect and creative project planner. Your role is to generate detailed, innovative, and practical software project ideas based on user requirements. Create a different project than what might have been generated before. Return responses as raw JSON without LaTeX formatting like \\boxed{}."
       }, {
         role: "user",
-        content: prompt + "\n\nIMPORTANT: Return a raw JSON object without any LaTeX formatting such as \\boxed{}."
+        content: prompt
       }],
       temperature: 0.8, // Slightly higher temperature for more variation
       max_tokens: 2500,

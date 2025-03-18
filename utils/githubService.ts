@@ -180,25 +180,35 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
         try {
           // Get GitHub username from user document
           const user = await User.findById(collaborator.userId);
-          if (!user || !user.username) {
+          if (!user) {
+            console.warn(`User not found for ID ${collaborator.userId}`);
+            continue;
+          }
+          
+          // IMPORTANT: Use githubUsername if available, fall back to username
+          const githubUsername = user.githubUsername || user.username;
+          if (!githubUsername) {
             console.warn(`GitHub username not found for user ${collaborator.userId}`);
             continue;
           }
           
+          // Log the username being used
+          console.log(`Using GitHub username: ${githubUsername} for user ${user.name} (${user._id})`);
+          
           // Skip owner if they're also listed as a collaborator
-          if (user.username === this.username) {
-            console.log(`Skipping repository owner ${user.username} as collaborator`);
+          if (githubUsername === this.username) {
+            console.log(`Skipping repository owner ${githubUsername} as collaborator`);
             continue;
           }
           
           const permission = this.determinePermissionLevel(collaborator.role);
           
           // Try to add collaborator
-          const success = await this.addCollaborator(repoOwner, repoName, user.username, permission);
+          const success = await this.addCollaborator(repoOwner, repoName, githubUsername, permission);
           
           if (success) {
             addedCollaborators.push({
-              username: user.username,
+              username: githubUsername,
               permission: permission
             });
           }

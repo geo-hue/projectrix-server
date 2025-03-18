@@ -20,6 +20,7 @@ export interface IUser extends Document {
   githubId: string;
   role: string;
   username: string;
+  githubUsername?: string;
   bio?: string;
   skills: string[];
   projectsGenerated: number;
@@ -78,6 +79,9 @@ const userSchema: Schema<IUser> = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
+  },
+  githubUsername: { 
+    type: String,
   },
   bio: {
     type: String,
