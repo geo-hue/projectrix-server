@@ -7,8 +7,14 @@ import { generateProjectReadme } from './githubTemplates';
 import { redis } from './redis';
 import dotenv from 'dotenv';
 import { generateRoleBreakdowns } from './githubAIService';
+import { createOrgRepositoryWithApp, addCollaboratorToOrgRepo, createOrUpdateFile } from './githubAppService';
 
 dotenv.config();
+
+const USE_ORGANIZATION = process.env.USE_GITHUB_ORG === 'true';
+const USE_GITHUB_APP = process.env.USE_GITHUB_APP === 'true';
+const GITHUB_ORG_NAME = process.env.GITHUB_ORG_NAME || 'projectrix-org';
+
 
 /**
  * GitHub integration service for Projectrix
@@ -43,10 +49,77 @@ async createRepository(
 ) {
   try {
     const repoName = this.sanitizeRepoName(project.title);
-    const orgName = process.env.GITHUB_ORG_NAME || 'projectrix-org';
+    // Check if we should use organization AND GitHub App
+    if (USE_ORGANIZATION && USE_GITHUB_APP && useOrganization) {
+      try {
+        console.log(`Attempting to create organization repository using GitHub App: ${repoName}`);
+        
+        // Generate repository description
+        const description = `${project.subtitle} - A Projectrix generated project`;
+        
+        // Create the repository using the GitHub App
+        const repository = await createOrgRepositoryWithApp(
+          repoName,
+          description,
+          isPrivate
+        );
+        
+        // If repository was created successfully, create initial files
+        if (!repository.exists) {
+          // Create README
+          const readmeContent = generateProjectReadme(project);
+          await createOrUpdateFile(
+            repoName,
+            'README.md',
+            readmeContent,
+            'Initial project setup by Projectrix'
+          );
+          
+          // Create .gitignore
+          const gitignoreTemplate = this.determineGitignoreTemplate(project.technologies);
+          const { data: gitignoreData } = await axios.get(`https://api.github.com/gitignore/templates/${gitignoreTemplate}`);
+          await createOrUpdateFile(
+            repoName,
+            '.gitignore',
+            gitignoreData.source,
+            'Add .gitignore'
+          );
+          
+          // Create CONTRIBUTING.md
+          const contributingContent = this.generateContributingGuide(project);
+          await createOrUpdateFile(
+            repoName,
+            'CONTRIBUTING.md',
+            contributingContent,
+            'Add contributing guidelines'
+          );
+        }
+        
+        // Add the owner as a collaborator
+        if (owner.username) {
+          await addCollaboratorToOrgRepo(repoName, owner.username, 'admin');
+        }
+        
+        // Return repository info
+        return {
+          owner: GITHUB_ORG_NAME,
+          name: repoName,
+          html_url: repository.html_url,
+          exists: repository.exists
+        };
+      } catch (appError) {
+        console.error('Error using GitHub App:', appError);
+        console.log('Falling back to regular OAuth flow');
+        // Continue with regular flow if GitHub App fails
+      }
+    }
     
-    // Determine repo owner (organization or user)
-    const repoOwner = useOrganization ? orgName : this.username;
+      // Check if organization usage is enabled globally via env var
+      const shouldUseOrg = USE_ORGANIZATION && useOrganization;
+      const orgName = GITHUB_ORG_NAME;
+    
+     // Determine repo owner (organization or user)
+     const repoOwner = shouldUseOrg ? orgName : this.username;
     
     // Check if repo already exists
     try {
@@ -84,16 +157,25 @@ async createRepository(
     
     let repoResponse;
     
-    if (useOrganization) {
-      repoResponse = await this.octokit.repos.createInOrg({
-        org: orgName,
-        ...createParams
-      });
+    if (shouldUseOrg) {
+      try {
+        repoResponse = await this.octokit.repos.createInOrg({
+          org: orgName,
+          ...createParams
+        });
+      } catch (orgError) {
+        console.error(`Failed to create repo in organization: ${orgError.message}`);
+        console.log('Falling back to personal account');
+        
+        // Fall back to personal account
+        repoResponse = await this.octokit.repos.createForAuthenticatedUser(createParams);
+      }
     } else {
       repoResponse = await this.octokit.repos.createForAuthenticatedUser(createParams);
     }
     
     const { data: repo } = repoResponse;
+    
     
     // Generate README and other base files
     await this.createInitialFiles(repo.owner.login, repo.name, project);

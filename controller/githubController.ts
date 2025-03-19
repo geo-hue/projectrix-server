@@ -10,7 +10,9 @@ import { getGitHubServiceForUser } from '../utils/githubService';
 import { Octokit } from '@octokit/rest';
 
 dotenv.config();
-
+const USE_ORGANIZATION = process.env.USE_GITHUB_ORG === 'true';
+const USE_GITHUB_APP = process.env.USE_GITHUB_APP === 'true';
+const GITHUB_ORG_NAME = process.env.GITHUB_ORG_NAME || 'projectrix-org';
 
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
@@ -114,7 +116,7 @@ export const createGitHubRepository = CatchAsyncError(async (req: Request, res: 
     }
     
     const { projectId } = req.params;
-    const { useOrganization, isPrivate } = req.body;
+    const { useOrganization: userPreference, isPrivate } = req.body;
     
     // Verify project belongs to user
     const project = await GeneratedProject.findOne({ _id: projectId, userId: req.user._id });
@@ -123,63 +125,46 @@ export const createGitHubRepository = CatchAsyncError(async (req: Request, res: 
       return next(new ErrorHandler("Project not found or you don't have permission", 404));
     }
     
-    // Get GitHub service for user
-    const githubService = await getGitHubServiceForUser(req.user._id.toString());
+    // Always create public repositories
+    const usePrivate = false; 
     
-    if (!githubService) {
-      // User hasn't authorized GitHub yet
-      return res.status(200).json({
-        success: false,
-        requiresAuth: true,
-        message: "GitHub authorization required"
-      });
-    }
+    // Determine if we should use organization
+    // If GitHub App is enabled, we'll attempt to use it first
+    const useOrganization = USE_ORGANIZATION;
     
-    // Always create public repos to avoid GitHub Pro requirements
-    const usePrivate = false; // Force public repositories
+    // Log our configuration for debugging
+    console.log('GitHub repository creation configuration:');
+    console.log(`- Organization enabled: ${USE_ORGANIZATION}`);
+    console.log(`- GitHub App enabled: ${USE_GITHUB_APP}`);
+    console.log(`- Organization name: ${GITHUB_ORG_NAME}`);
     
-    try {
-      // Create repository
-      const repository = await githubService.createRepository(
-        project, 
-        req.user, 
-        useOrganization === true, 
-        usePrivate
-      );
+    if (USE_GITHUB_APP && USE_ORGANIZATION) {
+      // Get GitHub service for user (still needed for personal account fallback)
+      const githubService = await getGitHubServiceForUser(req.user._id.toString());
       
-      // Add team members as collaborators if project has team members
-      if (project.teamMembers && project.teamMembers.length > 0) {
-        await githubService.addCollaborators(repository.owner, repository.name, project.teamMembers);
+      if (!githubService) {
+        // User hasn't authorized GitHub yet
+        return res.status(200).json({
+          success: false,
+          requiresAuth: true,
+          message: "GitHub authorization required"
+        });
       }
       
-      // Update project with GitHub info
-      project.githubInfo = {
-        repoOwner: repository.owner,
-        repoName: repository.name,
-        repoUrl: repository.html_url,
-        createdAt: new Date()
-      };
-      
-      await project.save();
-      
-      return res.status(repository.exists ? 200 : 201).json({
-        success: true,
-        repository,
-        message: repository.exists 
-          ? "Repository already exists" 
-          : "GitHub repository created successfully"
-      });
-    } catch (repoError) {
-      // If creating with organization fails, try with personal account
-      if (useOrganization && repoError.message?.includes('OAuth App access restrictions')) {
-        console.log('Organization creation failed due to restrictions, trying personal account...');
-        
+      // Create repository using GitHub App
+      try {
+        // Create repository
         const repository = await githubService.createRepository(
           project, 
           req.user, 
-          false, // Force personal account
+          useOrganization, 
           usePrivate
         );
+        
+        // Add team members as collaborators if project has team members
+        if (project.teamMembers && project.teamMembers.length > 0) {
+          await githubService.addCollaborators(repository.owner, repository.name, project.teamMembers);
+        }
         
         // Update project with GitHub info
         project.githubInfo = {
@@ -194,10 +179,93 @@ export const createGitHubRepository = CatchAsyncError(async (req: Request, res: 
         return res.status(repository.exists ? 200 : 201).json({
           success: true,
           repository,
-          message: "GitHub repository created successfully using your personal account"
+          message: repository.exists 
+            ? "Repository already exists" 
+            : "GitHub repository created successfully"
         });
-      } else {
-        throw repoError;
+      } catch (error) {
+        console.error('Error creating GitHub repository:', error);
+        return next(new ErrorHandler(error.message || "Failed to create GitHub repository", 500));
+      }
+    } else {
+      // Fall back to the original implementation
+      // Get GitHub service for user
+      const githubService = await getGitHubServiceForUser(req.user._id.toString());
+      
+      if (!githubService) {
+        // User hasn't authorized GitHub yet
+        return res.status(200).json({
+          success: false,
+          requiresAuth: true,
+          message: "GitHub authorization required"
+        });
+      }
+      
+      // Determine if we should use the organization
+      // This prioritizes the environment variable setting
+      const useOrganization = USE_ORGANIZATION && userPreference;
+      
+      try {
+        // Create repository
+        const repository = await githubService.createRepository(
+          project, 
+          req.user, 
+          useOrganization, 
+          usePrivate
+        );
+        
+        // Add team members as collaborators if project has team members
+        if (project.teamMembers && project.teamMembers.length > 0) {
+          await githubService.addCollaborators(repository.owner, repository.name, project.teamMembers);
+        }
+        
+        // Update project with GitHub info
+        project.githubInfo = {
+          repoOwner: repository.owner,
+          repoName: repository.name,
+          repoUrl: repository.html_url,
+          createdAt: new Date()
+        };
+        
+        await project.save();
+        
+        return res.status(repository.exists ? 200 : 201).json({
+          success: true,
+          repository,
+          message: repository.exists 
+            ? "Repository already exists" 
+            : "GitHub repository created successfully"
+        });
+      } catch (repoError) {
+        // If creating with organization fails, try with personal account
+        if (useOrganization && repoError.message?.includes('OAuth App access restrictions')) {
+          console.log('Organization creation failed due to restrictions, trying personal account...');
+          
+          const repository = await githubService.createRepository(
+            project, 
+            req.user, 
+            false, // Force personal account
+            usePrivate
+          );
+          
+          // Update project with GitHub info
+          project.githubInfo = {
+            repoOwner: repository.owner,
+            repoName: repository.name,
+            repoUrl: repository.html_url,
+            createdAt: new Date()
+          };
+          
+          await project.save();
+          
+          return res.status(repository.exists ? 200 : 201).json({
+            success: true,
+            repository,
+            message: "GitHub repository created successfully using your personal account"
+          });
+        } else {
+          throw repoError;
+        }
       }
     }
   } catch (error: any) {
