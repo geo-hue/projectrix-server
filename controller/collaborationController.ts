@@ -22,6 +22,9 @@ import { getGitHubServiceForUser } from '../utils/githubService';
 export const submitCollaborationRequest = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { projectId, role, message } = req.body;
+    if (!req.user) {
+      return next(new ErrorHandler("Authentication required", 401));
+    }
     const applicantId = req.user._id;
 
     // Log the received data
@@ -119,6 +122,9 @@ export const submitCollaborationRequest = CatchAsyncError(async (req: Request, r
 // Get user's collaboration requests
 export const getMyCollaborationRequests = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!req.user) {
+      return next(new ErrorHandler("Authentication required", 401));
+    }
     const userId = req.user._id;
 
     const requests = await CollaborationRequest.find({ applicantId: userId })
@@ -144,6 +150,9 @@ export const getMyCollaborationRequests = CatchAsyncError(async (req: Request, r
 // Get incoming collaboration requests for projects owned by the user
 export const getIncomingCollaborationRequests = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!req.user) {
+      return next(new ErrorHandler("Authentication required", 401));
+    }
     const userId = req.user._id;
 
     // Find all projects owned by the user
@@ -178,6 +187,9 @@ export const updateCollaborationRequestStatus = CatchAsyncError(async (req: Requ
   try {
     const { requestId } = req.params;
     const { status } = req.body;
+    if (!req.user) {
+      return next(new ErrorHandler("Authentication required", 401));
+    }
     const userId = req.user._id;
 
     if (!['accepted', 'rejected'].includes(status)) {
@@ -396,6 +408,9 @@ function determinePermissionLevel(role: string): 'admin' | 'push' | 'pull' {
 // Get user's active collaborations
 export const getMyCollaborations = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!req.user) {
+      return next(new ErrorHandler("Authentication required", 401));
+    }
     const userId = req.user._id;
     console.log(`Getting collaborations for user ${userId}`);
 

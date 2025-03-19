@@ -122,6 +122,9 @@ export const updateUserRole = CatchAsyncError(async (req: Request, res: Response
     }
     
     // Get current admin user (for validation)
+    if (!req.user) {
+      return next(new ErrorHandler("Authentication required", 401));
+    }
     const adminId = req.user._id;
     
     // Prevent admin from changing their own role
@@ -215,7 +218,9 @@ export const updateUserPlan = CatchAsyncError(async (req: Request, res: Response
 export const deleteUser = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    
+    if (!req.user) {
+      return next(new ErrorHandler("Authentication required", 401));
+    }
     // Get current admin user (for validation)
     const adminId = req.user._id;
     

@@ -51,6 +51,9 @@ export const createActivity = async (
 // Get user's activities
 export const getUserActivities = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!req.user) {
+      return next(new ErrorHandler("Authentication required", 401));
+    }
     const userId = req.user._id;
     const { page = 1, limit = 20, filter } = req.query;
     
@@ -95,6 +98,9 @@ export const getUserActivities = CatchAsyncError(async (req: Request, res: Respo
 // Get unread notifications count
 export const getUnreadCount = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!req.user) {
+      return next(new ErrorHandler("Authentication required", 401));
+    }
     const userId = req.user._id;
     
     const count = await Activity.countDocuments({ userId, read: false });
@@ -112,6 +118,9 @@ export const getUnreadCount = CatchAsyncError(async (req: Request, res: Response
 export const markActivityAsRead = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { activityId } = req.params;
+    if (!req.user) {
+      return next(new ErrorHandler("Authentication required", 401));
+    }
     const userId = req.user._id;
     
     const activity = await Activity.findOne({ _id: activityId, userId });
@@ -135,6 +144,9 @@ export const markActivityAsRead = CatchAsyncError(async (req: Request, res: Resp
 // Mark all activities as read
 export const markAllAsRead = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!req.user) {
+      return next(new ErrorHandler("Authentication required", 401));
+    }
     const userId = req.user._id;
     
     await Activity.updateMany({ userId, read: false }, { read: true });
@@ -152,6 +164,9 @@ export const markAllAsRead = CatchAsyncError(async (req: Request, res: Response,
 export const deleteActivity = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { activityId } = req.params;
+    if (!req.user) {
+      return next(new ErrorHandler("Authentication required", 401));
+    }
     const userId = req.user._id;
     
     const activity = await Activity.findOne({ _id: activityId, userId });
@@ -160,7 +175,7 @@ export const deleteActivity = CatchAsyncError(async (req: Request, res: Response
       return next(new ErrorHandler("Activity not found", 404));
     }
     
-    await activity.remove();
+    await activity.deleteOne();
     
     res.status(200).json({
       success: true,
@@ -173,6 +188,9 @@ export const deleteActivity = CatchAsyncError(async (req: Request, res: Response
 
 export const clearAllActivities = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (!req.user) {
+        return next(new ErrorHandler("Authentication required", 401));
+      }
       const userId = req.user._id;
       
       // Delete all activities for this user
