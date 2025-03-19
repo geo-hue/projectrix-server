@@ -32,6 +32,9 @@ const parseStateToken = (state: string): { projectId: string; userId: string; ti
 export const initDiscordOAuth = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { projectId } = req.params;
+     if (!req.user) {
+          return next(new ErrorHandler("Authentication required", 401));
+        }
     const userId = req.user._id;
 
     if (!projectId) {
@@ -40,7 +43,7 @@ export const initDiscordOAuth = CatchAsyncError(async (req: Request, res: Respon
 
     // Check if user already has a linked Discord account
     const user = await User.findById(userId);
-    if (user.discordId) {
+    if (user?.discordId) {
       // User already has a linked Discord account
       console.log(`User ${userId} already has linked Discord account: ${user.discordId}`);
       
@@ -135,7 +138,7 @@ export const handleDiscordCallback = CatchAsyncError(async (req: Request, res: R
     res.redirect(`${process.env.FRONTEND_URL}/projects/${projectId}?discord=${added ? 'success' : 'invite'}&invite=${encodeURIComponent(inviteLink!)}`);
   } catch (error: any) {
     console.error('Discord callback error:', error);
-    res.redirect(`${process.env.FRONTEND_URL}/projects/${projectId}?discord=error`);
+    res.redirect(`${process.env.FRONTEND_URL}/projects/${req.query.state || ''}?discord=error`);
   }
 });
 
@@ -144,6 +147,9 @@ export const handleDiscordCallback = CatchAsyncError(async (req: Request, res: R
 export const createDiscordChannel = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { projectId } = req.params;
+     if (!req.user) {
+          return next(new ErrorHandler("Authentication required", 401));
+        }
     const userId = req.user._id;
 
     console.log(`Discord channel request for project ${projectId} by user ${userId}`);
@@ -170,7 +176,7 @@ export const createDiscordChannel = CatchAsyncError(async (req: Request, res: Re
 
     // Check if user has a linked Discord account
     const user = await User.findById(userId);
-    if (user.discordId) {
+    if (user?.discordId) {
       // If project already has a Discord channel
       if (project.discordChannelId && project.discordInviteLink) {
         console.log(`Project already has Discord channel: ${project.discordChannelId}`);
@@ -244,6 +250,9 @@ export const createDiscordChannel = CatchAsyncError(async (req: Request, res: Re
 export const getDiscordInvite = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { projectId } = req.params;
+     if (!req.user) {
+          return next(new ErrorHandler("Authentication required", 401));
+        }
     const userId = req.user._id;
 
     // Check if project exists

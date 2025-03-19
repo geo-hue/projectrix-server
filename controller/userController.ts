@@ -7,6 +7,7 @@ import { verifyFirebaseToken } from '../utils/fbauth';
 import User from '../models/userModel';
 import { initializeUserPlanLimits } from '../utils/pricingUtils';
 import { sendUserWelcomeEmail } from './emailController';
+import axios from 'axios';
 
 // Register or login user with GitHub
 export const githubAuth = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
@@ -101,8 +102,9 @@ export const githubAuth = CatchAsyncError(async (req: Request, res: Response, ne
         
         // Send welcome email for new users
         if (email) {
+          const userId = user._id as unknown as string;
           // Send welcome email asynchronously (don't await)
-          sendUserWelcomeEmail(user._id.toString())
+          sendUserWelcomeEmail(userId.toString())
             .then((result) => {
               console.log(`Welcome email sent to ${email}: ${result ? 'Success' : 'Failed'}`);
             })
@@ -326,7 +328,7 @@ export const refreshToken = CatchAsyncError(async (req: Request, res: Response, 
     
     console.log('Decoded Firebase Token:', decodedToken);
 
-    
+
     // Check if user exists
     const user = await User.findOne({ githubId: userId });
     

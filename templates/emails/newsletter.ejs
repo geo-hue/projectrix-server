@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><%= subject %></title>
+  <title>We Value Your Feedback on Projectrix</title>
   <style>
     /* Reset styles */
     body, html {
@@ -32,9 +32,36 @@
       border-bottom: 1px solid #eaeaea;
     }
     
-    .logo {
-      max-width: 200px;
-      height: auto;
+    /* Logo */
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+    
+    .logo-text {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 32px;
+      font-weight: 700;
+      background: linear-gradient(to right, #1e3a8a, #2563eb);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      letter-spacing: 2px;
+      position: relative;
+      display: inline-block;
+      padding-bottom: 5px;
+    }
+    
+    .logo-text::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 0;
+      height: 2px;
+      background: linear-gradient(to right, #1e3a8a, #2563eb);
+      transition: width 0.3s ease;
+    }
+    
+    .logo-container:hover .logo-text::after {
+      width: 100%;
     }
     
     /* Content */
@@ -53,36 +80,28 @@
       color: #2563eb;
     }
     
-    /* Article */
-    .article {
-      margin: 25px 0;
-      padding-bottom: 20px;
-      border-bottom: 1px solid #eaeaea;
+    /* Features */
+    .features {
+      margin: 20px 0;
+      padding: 15px;
+      background-color: #f3f4f6;
+      border-radius: 8px;
     }
     
-    .article:last-child {
-      border-bottom: none;
+    .feature {
+      margin-bottom: 15px;
+      display: flex;
     }
     
-    .article h2 {
-      margin-top: 0;
-      color: #1e40af;
-      font-size: 20px;
-    }
-    
-    .article-image {
-      width: 100%;
-      height: auto;
-      border-radius: 4px;
-      margin: 10px 0;
-    }
-    
-    .read-more {
-      display: inline-block;
-      margin-top: 10px;
+    .feature-icon {
+      flex: 0 0 30px;
+      font-size: 18px;
       color: #2563eb;
-      text-decoration: none;
-      font-weight: bold;
+      margin-right: 10px;
+    }
+    
+    .feature-text {
+      flex: 1;
     }
     
     /* CTA Button */
@@ -133,34 +152,62 @@
 <body>
   <div class="container">
     <div class="header">
-      <img src="https://projectrix.vercel.app/logo.png" alt="Projectrix Logo" class="logo">
+      <a href="https://projectrix.vercel.app" class="logo-container">
+        <div class="logo-text">PROJECTRIX</div>
+      </a>
     </div>
     
     <div class="content">
-      <h1>Hey <%= name %>,</h1>
+      <h1>Thank You for Testing Projectrix, <%= name %>!</h1>
       
-      <p><%= introduction %></p>
+      <p>We sincerely appreciate you taking the time to explore our platform. Your participation during this testing phase is invaluable as we work to refine and enhance Projectrix to better serve developers and creators like you.</p>
       
-      <% if (articles && articles.length > 0) { %>
-        <% articles.forEach(function(article) { %>
-          <div class="article">
-            <h2><%= article.title %></h2>
-            <% if (article.image) { %>
-              <img src="<%= article.image %>" alt="<%= article.title %>" class="article-image">
-            <% } %>
-            <p><%= article.content %></p>
-            <% if (article.link) { %>
-              <a href="<%= article.link %>" class="read-more">Read more →</a>
-            <% } %>
+      <p>We're eager to hear about your experience with our platform and would greatly value your feedback to help us improve.</p>
+      
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">✨</div>
+          <div class="feature-text">
+            <strong>Have you tried all our key features?</strong> We encourage you to explore additional features including AI-powered project generation, collaborator matching, and our GitHub & Discord integrations.
           </div>
-        <% }) %>
-      <% } %>
+        </div>
+        
+        <div class="feature">
+          <div class="feature-icon">📝</div>
+          <div class="feature-text">
+            <strong>Share your thoughts</strong>: What aspects of Projectrix worked well for you? What could be improved? Your honest feedback helps us prioritize enhancements.
+          </div>
+        </div>
+        
+        <div class="feature">
+          <div class="feature-icon">🐛</div>
+          <div class="feature-text">
+            <strong>Encountered any issues?</strong> If you experienced any bugs, technical difficulties, or confusing workflows, we want to know so we can fix them promptly.
+          </div>
+        </div>
+        
+        <div class="feature">
+          <div class="feature-icon">💡</div>
+          <div class="feature-text">
+            <strong>Suggest new features</strong>: We welcome your ideas for additional tools and capabilities that would make Projectrix more valuable to you.
+          </div>
+        </div>
+      </div>
       
-      <% if (mainCta) { %>
-        <a href="<%= mainCta.link %>" class="cta-button"><%= mainCta.text %></a>
-      <% } %>
+      <p>Your feedback is crucial to our development process. Please take a moment to share your experience with us through our dedicated feedback form:</p>
       
-      <p>Thank you for being part of our community!</p>
+      <a href="https://projectrix.vercel.app/feedback" class="cta-button">Share Your Feedback</a>
+      
+      <p>If you prefer more direct communication, you can contact us via:</p>
+      
+      <ul style="list-style-type: none; padding-left: 0;">
+        <li>📱 Phone: +234 9120888381</li>
+        <li>✉️ Email: <a href="mailto:gukohgodwin@gmail.com">gukohgodwin@gmail.com</a></li>
+      </ul>
+      
+      <p>We're committed to building a platform that truly serves the needs of our developer community, and your input is essential to achieving that goal.</p>
+      
+      <p>Thank you again for being an early tester of Projectrix.</p>
       
       <p>Best regards,<br>The Projectrix Team</p>
     </div>
@@ -172,7 +219,7 @@
         <a href="https://discord.gg/projectrix" class="social-link">Discord</a>
       </div>
       
-      <p>You're receiving this email because you're subscribed to Projectrix newsletters.</p>
+      <p>You're receiving this email because you signed up for Projectrix. We'll send you occasional updates about new features and platform improvements.</p>
       
       <p>
         <a href="https://projectrix.vercel.app/unsubscribe?email=<%= userEmail %>" class="unsubscribe">Unsubscribe</a> |

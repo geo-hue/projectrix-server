@@ -175,7 +175,7 @@ export const stripeWebhook = async (req: Request, res: Response) => {
         signature,
         webhookSecret
       );
-    } catch (err) {
+    } catch (err:any) {
       console.error('Error constructing event:', err.message);
       return res.status(400).json({ success: false, message: `Webhook signature verification failed: ${err.message}` });
     }
@@ -276,7 +276,7 @@ export const stripeWebhook = async (req: Request, res: Response) => {
       }
     })();
     
-  } catch (error) {
+  } catch (error:any) {
     console.error('Stripe webhook error:', error);
     res.status(400).json({ success: false, message: error.message });
   }
@@ -371,16 +371,16 @@ export const getSubscriptionStatus = CatchAsyncError(async (req: Request, res: R
     // Validate subscription status against user plan
     if (subscription && user.plan !== subscription.plan) {
       // Update subscription to match user plan
-      subscription.plan = user.plan;
+      subscription.plan = user.plan as "free" | "pro";
       await subscription.save();
     }
     
     res.status(200).json({
       success: true,
-      status: subscription.status,
+      status: subscription?.status,
       plan: user.plan, // Use user.plan as the source of truth
-      endDate: subscription.endDate,
-      renewalDate: subscription.renewalDate
+      endDate: subscription?.endDate,
+      renewalDate: subscription?.renewalDate
     });
   } catch (error: any) {
     return next(new ErrorHandler(error.message, 500));

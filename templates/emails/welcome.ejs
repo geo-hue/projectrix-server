@@ -32,9 +32,36 @@
       border-bottom: 1px solid #eaeaea;
     }
     
-    .logo {
-      max-width: 200px;
-      height: auto;
+    /* Logo */
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+    
+    .logo-text {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 32px;
+      font-weight: 700;
+      background: linear-gradient(to right, #1e3a8a, #2563eb);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      letter-spacing: 2px;
+      position: relative;
+      display: inline-block;
+      padding-bottom: 5px;
+    }
+    
+    .logo-text::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 0;
+      height: 2px;
+      background: linear-gradient(to right, #1e3a8a, #2563eb);
+      transition: width 0.3s ease;
+    }
+    
+    .logo-container:hover .logo-text::after {
+      width: 100%;
     }
     
     /* Content */
@@ -125,7 +152,9 @@
 <body>
   <div class="container">
     <div class="header">
-      <img src="https://projectrix.vercel.app/logo.png" alt="Projectrix Logo" class="logo">
+      <a href="https://projectrix.vercel.app" class="logo-container">
+        <div class="logo-text">PROJECTRIX</div>
+      </a>
     </div>
     
     <div class="content">

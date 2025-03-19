@@ -98,11 +98,11 @@ export const submitCollaborationRequest = CatchAsyncError(async (req: Request, r
       .populate('publisherId', 'name username avatar email');
 
       const applicant = await User.findById(applicantId);
-      const applicantName = applicant.name;
+      const applicantName = applicant?.name || 'Applicant';
 
       await createCollaborationRequestActivity(
         publisherId.toString(),
-        collaborationRequest._id.toString(),
+        collaborationRequest._id?.toString() || collaborationRequest.id,
         applicantName,
         projectTitle,
         role
@@ -228,7 +228,7 @@ export const updateCollaborationRequestStatus = CatchAsyncError(async (req: Requ
         
         await createCollaborationResponseActivity(
           request.applicantId.toString(),
-          request._id.toString(),
+          request._id?.toString() || request.id,
           req.user.name,
           project.title,
           request.role,
@@ -246,7 +246,7 @@ export const updateCollaborationRequestStatus = CatchAsyncError(async (req: Requ
     request.status = status;
     await request.save();
 
-    let rejectedRequests = [];
+    let rejectedRequests: string | any[] = [];
 
     // If accepting a request, mark the role as filled and reject other pending requests for the same role
     if (status === 'accepted') {
@@ -330,9 +330,9 @@ export const updateCollaborationRequestStatus = CatchAsyncError(async (req: Requ
                 // Create activity for auto-rejection
                 await createCollaborationResponseActivity(
                   req.applicantId.toString(),
-                  req._id.toString(),
+                  req._id?.toString() || req.id,
                   "System",
-                  req.projectId.title || "Project",
+                  (req.projectId as any).title || "Project",
                   req.role,
                   'rejected'
                 );
@@ -370,8 +370,8 @@ export const updateCollaborationRequestStatus = CatchAsyncError(async (req: Requ
 
     await createCollaborationResponseActivity(
       request.applicantId.toString(),
-      request._id.toString(),
-      publisher.name,
+      request._id?.toString() || request.id,
+      publisher?.name || "Project Owner",
       project.title,
       request.role,
       status
@@ -449,13 +449,13 @@ export const getMyCollaborations = CatchAsyncError(async (req: Request, res: Res
     // Ensure proper formatting for consistent data structure
     const collaborations = [
       ...acceptedRequests.map(req => {
-        console.log(`Processing collaboration for project: ${req.projectId.title}`);
+        console.log(`Processing collaboration for project: ${(req.projectId as any).title || "Project" }`);
         return {
           type: 'member',
           project: {
-            ...req.projectId.toObject(),
+            ...((req.projectId as any).toObject ? (req.projectId as any).toObject() : req.projectId as any),
             // Ensure team members are properly formatted
-            teamMembers: (req.projectId.teamMembers || []).map(member => ({
+            teamMembers: ((req.projectId as any).teamMembers || []).map((member: any) => ({
               userId: member.userId,
               role: member.role,
               joinedAt: member.joinedAt
@@ -471,8 +471,8 @@ export const getMyCollaborations = CatchAsyncError(async (req: Request, res: Res
         if (project.teamMembers && project.teamMembers.length > 0) {
           console.log('Team members found:', 
             project.teamMembers.map(m => ({
-              userId: m.userId ? (m.userId._id || m.userId) : 'missing',
-              name: m.userId?.name || 'unknown',
+              userId: m.userId ? ((m.userId as any)._id || m.userId) : 'missing',
+              name: (m.userId as any)?.name || 'unknown',
               role: m.role
             }))
           );

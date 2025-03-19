@@ -113,6 +113,7 @@ export const upvoteFeedback = CatchAsyncError(async (req: Request, res: Response
       return next(new ErrorHandler("Authentication required", 401));
     }
 
+    const userId = req.user._id;
     const { feedbackId } = req.params;
 
     // Find feedback
@@ -122,15 +123,15 @@ export const upvoteFeedback = CatchAsyncError(async (req: Request, res: Response
     }
 
     // Check if user already upvoted
-    const alreadyUpvoted = feedback.upvotes.includes(req.user._id);
+    const alreadyUpvoted = feedback.upvotes.some(id => id.toString() === userId.toString());
 
     // Toggle upvote
     if (alreadyUpvoted) {
       // Remove upvote
-      feedback.upvotes = feedback.upvotes.filter(id => id.toString() !== req.user._id.toString());
+      feedback.upvotes = feedback.upvotes.filter(id => id.toString() !== userId.toString());
     } else {
       // Add upvote
-      feedback.upvotes.push(req.user._id);
+      feedback.upvotes.push(userId as any);
     }
 
     await feedback.save();
@@ -213,7 +214,7 @@ export const updateFeedbackStatus = CatchAsyncError(async (req: Request, res: Re
 
     await createFeedbackResponseActivity(
       feedback.userId.toString(),
-      feedback._id.toString(),
+      feedback._id?.toString() || feedback.id,
       feedback.title,
       status
     );
