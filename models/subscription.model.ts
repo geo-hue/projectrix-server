@@ -14,6 +14,7 @@ export interface ISubscription extends Document {
     stripeCustomerId?: string;
     flutterwaveTransactionRef?: string;
   };
+  autoRenewal: boolean;
   paymentHistory: Array<{
     amount: number;
     currency: string;
@@ -63,6 +64,10 @@ const subscriptionSchema: Schema<ISubscription> = new mongoose.Schema({
       date.setDate(date.getDate() + 30);
       return date;
     }
+  },
+  autoRenewal:{
+    type:Boolean,
+    default:false
   },
   provider: {
     name: {

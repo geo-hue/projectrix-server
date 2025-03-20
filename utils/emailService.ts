@@ -88,7 +88,45 @@ export const sendWelcomeEmail = async (user: any): Promise<boolean> => {
     }
   );
 };
+/**
+ * Send a notification when subscription expires
+ * @param user User object containing name and email
+ */
+export const sendSubscriptionExpiryEmail = async (user: any): Promise<boolean> => {
+  const { name, email } = user;
+  
+  return sendEmailTemplate(
+    email,
+    'Your Projectrix Pro Subscription Has Expired',
+    'subscription-expiry',
+    {
+      name,
+      userName: name,
+      userEmail: email,
+    }
+  );
+};
 
+/**
+ * Send a reminder email when subscription is about to expire
+ * @param user User object containing name and email
+ * @param daysRemaining Number of days remaining in subscription
+ */
+export const sendSubscriptionReminderEmail = async (user: any, daysRemaining: number): Promise<boolean> => {
+  const { name, email } = user;
+  
+  return sendEmailTemplate(
+    email,
+    `Your Projectrix Pro Subscription Expires in ${daysRemaining} Days`,
+    'subscription-reminder',
+    {
+      name,
+      userName: name,
+      userEmail: email,
+      daysRemaining
+    }
+  );
+};
 /**
  * Send a newsletter to all subscribed users
  * @param subject Newsletter subject

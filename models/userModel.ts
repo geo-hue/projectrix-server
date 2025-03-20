@@ -1,4 +1,3 @@
-// Updated User Model
 import mongoose, { Document, Model, Schema } from "mongoose";
 
 interface IStartedProject {
@@ -40,6 +39,8 @@ export interface IUser extends Document {
   emailVerified: boolean; 
   lastEmailSent?: Date; 
   enhancementsLeft: number;
+  nextLimitResetDate?: Date; // New field for user-specific limit resets
+  lastLimitResetDate?: Date; // New field to track when limits were last reset
   comparePassword(password: string): Promise<boolean>;
   SignAccessToken(): string;
   SignRefreshToken(): string;
@@ -172,7 +173,40 @@ const userSchema: Schema<IUser> = new mongoose.Schema({
   },
   lastEmailSent: {
     type: Date
+  },
+  // New fields for user-specific limit resets
+  nextLimitResetDate: {
+    type: Date,
+    default: function() {
+      // Set initial reset date to 30 days after account creation
+      const date = new Date();
+      date.setDate(date.getDate() + 30);
+      return date;
+    }
+  },
+  lastLimitResetDate: {
+    type: Date
   }
+});
+
+// Pre-save hook to handle changes in subscription plan
+userSchema.pre('save', function(next) {
+  // Only run this if plan is being modified
+  if (this.isModified('plan')) {
+    // Reset user limits based on new plan
+    if (this.plan === 'pro') {
+      this.projectIdeasLeft = 10;
+      this.collaborationRequestsLeft = 999999; // Effectively unlimited
+      this.enhancementsLeft = 8;
+    } else if (this.plan === 'free') {
+      // If downgrading from pro to free, set reasonable limits
+      this.projectIdeasLeft = Math.min(this.projectIdeasLeft, 3);
+      this.collaborationRequestsLeft = Math.min(this.collaborationRequestsLeft, 3);
+      this.enhancementsLeft = Math.min(this.enhancementsLeft, 2);
+    }
+  }
+  
+  next();
 });
 
 const User: Model<IUser> = mongoose.model("User", userSchema);
