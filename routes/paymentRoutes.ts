@@ -5,7 +5,6 @@ import {
   createPaymentSession,
   verifyPayment,
   stripeWebhook,
-  manualUpgrade,
   getSubscriptionStatus,
   cancelSubscription,
   getPaymentHistory

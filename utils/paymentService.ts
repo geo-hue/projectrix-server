@@ -1,3 +1,4 @@
+// utils/paymentService.ts - Updated to use Flutterwave for both Nigerian and international payments
 import Stripe from 'stripe';
 import Flutterwave from 'flutterwave-node-v3';
 import ErrorHandler from './ErrorHandler';
@@ -10,9 +11,10 @@ import { redis } from './redis';
 dotenv.config();
 
 // Initialize payment providers with API keys
+// Note: Stripe is still initialized but won't be used for processing payments
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-    apiVersion: '2025-02-24.acacia',
-  });
+  apiVersion: '2025-02-24.acacia',
+});
 
 const flutterwave = new Flutterwave(
   process.env.FLUTTERWAVE_PUBLIC_KEY as string,
@@ -23,14 +25,14 @@ const flutterwave = new Flutterwave(
 // Supported currencies and their configuration
 const PAYMENT_CONFIG = {
   USD: {
-    provider: 'stripe',
-    amount: 500, // $5.00 in cents
+    provider: 'flutterwave', // Changed from 'stripe' to 'flutterwave'
+    amount: 500, // $5.00
     symbol: '$',
     displayAmount: 5
   },
   NGN: {
     provider: 'flutterwave',
-    amount: 500000, // 5000 NGN in kobo (smallest unit)
+    amount: 500000, // 5000 NGN
     symbol: '₦',
     displayAmount: 5000
   }
@@ -48,6 +50,7 @@ export const getPaymentConfig = (currency: 'USD' | 'NGN') => {
 };
 
 // Create a payment intent/session with Stripe
+// This function is kept for future use but won't be called in the current flow
 export async function createStripePaymentSession(
   userId: string,
   email: string,
@@ -101,22 +104,27 @@ export async function createStripePaymentSession(
   }
 }
 
-// Create a payment link with Flutterwave
+// Create a payment link with Flutterwave - now handles both NGN and USD
 export async function createFlutterwavePayment(
   userId: string,
   email: string,
   name: string,
-  phoneNumber: string = ''
+  phoneNumber: string = '',
+  currency: 'NGN' | 'USD' = 'NGN'
 ) {
   try {
     // Generate a unique transaction reference that includes the userId
     const txRef = `projectrix-${Date.now()}-${userId}`;
 
+    // Get the correct amount based on currency
+    const config = PAYMENT_CONFIG[currency];
+    const amount = currency === 'USD' ? 5 : 5000; // Use display amounts here, not smallest unit
+    
     // Create payment data with better metadata
     const paymentData = {
       tx_ref: txRef,
-      amount: PAYMENT_CONFIG.NGN.amount / 100, // Convert from kobo to naira (5000)
-      currency: 'NGN',
+      amount: amount, 
+      currency: currency,
       redirect_url: `${process.env.FRONTEND_URL}/payment/callback`,
       customer: {
         email,
@@ -130,12 +138,13 @@ export async function createFlutterwavePayment(
       },
       meta: {
         userId,
-        productType: 'subscription'
+        productType: 'subscription',
+        currency: currency
       }
     };
 
     // Log payment request
-    console.log('Creating Flutterwave payment for user:', userId);
+    console.log(`Creating Flutterwave payment for user: ${userId} in ${currency}`);
     
     // Use the standard endpoint to create a payment link
     const response = await axios.post(
@@ -151,7 +160,8 @@ export async function createFlutterwavePayment(
     if (response.data && response.data.status === 'success') {
       console.log('Flutterwave payment link created:', {
         link: response.data.data.link,
-        txRef
+        txRef,
+        currency
       });
       
       return {
@@ -168,7 +178,6 @@ export async function createFlutterwavePayment(
     throw new ErrorHandler(error.response?.data?.message || error.message || 'Failed to create payment link', 500);
   }
 }
-
 
 // Verify Flutterwave payment
 export async function verifyFlutterwavePayment(transactionId: string) {
@@ -188,7 +197,8 @@ export async function verifyFlutterwavePayment(transactionId: string) {
     
     console.log('Flutterwave verification response:', {
       status: response.data.status,
-      dataStatus: response.data.data?.status
+      dataStatus: response.data.data?.status,
+      currency: response.data.data?.currency
     });
     
     if (response.data.status === 'success' && 
@@ -254,8 +264,8 @@ export async function verifyFlutterwavePayment(transactionId: string) {
   }
 }
 
-
 // Handle Stripe webhook events
+// This function is kept for future use but won't be active in the current flow
 export async function handleStripeWebhook(event: Stripe.Event) {
   try {
     switch (event.type) {
@@ -324,11 +334,12 @@ export async function handleStripeWebhook(event: Stripe.Event) {
     throw new ErrorHandler('Failed to process webhook', 500);
   }
 }
+
 // Update user subscription
 export async function updateUserSubscription(
   userId: string, 
   providerId: string = '', 
-  provider: 'stripe' | 'flutterwave' = 'stripe'
+  provider: 'stripe' | 'flutterwave' = 'flutterwave' // Default changed to flutterwave
 ) {
   try {
     console.log(`Updating subscription for user: ${userId} via ${provider}`);
@@ -356,7 +367,8 @@ export async function updateUserSubscription(
           plan: 'pro',
           planExpiryDate: expiryDate,
           projectIdeasLeft: 10,
-          collaborationRequestsLeft: 999999 // Effectively unlimited
+          collaborationRequestsLeft: 999999, // Effectively unlimited
+          enhancementsLeft: 8 // Reset enhancements for Pro users
         },
         { new: true }
       );
@@ -511,6 +523,7 @@ export async function addPaymentToHistory(
     return false;
   }
 }
+
 // Get pricing for current user location
 export function getPricingForLocation(countryCode: string) {
   const currency = detectCurrencyFromCountryCode(countryCode);

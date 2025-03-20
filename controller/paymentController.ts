@@ -1,11 +1,10 @@
-// controller/paymentController.ts
+// controller/paymentController.ts - Updated to use Flutterwave for all payments
 import { Request, Response, NextFunction } from 'express';
 import { CatchAsyncError } from '../middleware/catchAsyncErrors';
 import ErrorHandler from '../utils/ErrorHandler';
 import User from '../models/userModel';
 import Subscription from '../models/subscription.model';
 import { 
-  createStripePaymentSession, 
   createFlutterwavePayment, 
   verifyFlutterwavePayment, 
   getPricingForLocation,
@@ -17,73 +16,72 @@ import { redis } from '../utils/redis';
 
 // Get pricing information based on user location
 export const getPricing = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      // Get country code from request
-      const { countryCode } = req.query;
-      
-      if (!countryCode) {
-        return next(new ErrorHandler("Country code is required", 400));
-      }
-      
-      console.log(`Getting pricing for country: ${countryCode}`);
-      
-      // Get pricing for location
-      const pricing = getPricingForLocation(countryCode as string);
-      
-      console.log(`Pricing returned: ${JSON.stringify(pricing)}`);
-      
-      res.status(200).json({
-        success: true,
-        pricing
-      });
-    } catch (error: any) {
-      return next(new ErrorHandler(error.message, 500));
+  try {
+    // Get country code from request
+    const { countryCode } = req.query;
+    
+    if (!countryCode) {
+      return next(new ErrorHandler("Country code is required", 400));
     }
-  });
+    
+    console.log(`Getting pricing for country: ${countryCode}`);
+    
+    // Get pricing for location
+    const pricing = getPricingForLocation(countryCode as string);
+    
+    console.log(`Pricing returned: ${JSON.stringify(pricing)}`);
+    
+    res.status(200).json({
+      success: true,
+      pricing
+    });
+  } catch (error: any) {
+    return next(new ErrorHandler(error.message, 500));
+  }
+});
 
-// Create a payment session (Stripe or Flutterwave)
+// Create a payment session (using Flutterwave for all payments)
 export const createPaymentSession = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
       return next(new ErrorHandler("Authentication required", 401));
     }
     
-    const { paymentMethod, phoneNumber } = req.body;
+    const { phoneNumber } = req.body;
     const userId = req.user._id;
     const email = req.user.email;
     const name = req.user.name;
     
-    // Validate payment method
-    if (!paymentMethod || !['stripe', 'flutterwave'].includes(paymentMethod)) {
-      return next(new ErrorHandler("Invalid payment method", 400));
+    // Detect the appropriate currency based on user IP or provided country
+    // For simplicity, we'll use the user's IP to determine location
+    let currency: 'NGN' | 'USD' = 'USD';
+    
+    // Check if the request has a country header (this would be set by your frontend)
+    const userCountry = req.headers['x-user-country'] as string;
+    if (userCountry === 'NG') {
+      currency = 'NGN';
     }
     
-    // Create payment based on method
-    if (paymentMethod === 'stripe') {
-      const session = await createStripePaymentSession(userId.toString(), email, name);
-      
-      res.status(200).json({
-        success: true,
-        session
-      });
-    } else {
-      // For Flutterwave, validate phone number
-      if (!phoneNumber && paymentMethod === 'flutterwave') {
-        return next(new ErrorHandler("Phone number is required for Flutterwave payments", 400));
-      }
-      
-      const payment = await createFlutterwavePayment(
-        userId.toString(), 
-        email, 
-        name, 
-        phoneNumber
-      );
-      
-      res.status(200).json({
-        success: true,
-        payment
-      });
+    console.log(`Creating payment for ${name} (${email}) in ${currency}`);
+    
+    // For Flutterwave, validate phone number - required for all payments now
+    if (!phoneNumber) {
+      return next(new ErrorHandler("Phone number is required for payment processing", 400));
     }
+    
+    // Create Flutterwave payment for both NGN and USD
+    const payment = await createFlutterwavePayment(
+      userId.toString(), 
+      email, 
+      name, 
+      phoneNumber,
+      currency
+    );
+    
+    res.status(200).json({
+      success: true,
+      payment
+    });
   } catch (error: any) {
     return next(new ErrorHandler(error.message, 500));
   }
@@ -139,147 +137,17 @@ export const verifyPayment = CatchAsyncError(async (req: Request, res: Response,
   }
 });
 
-// Handle Stripe webhook
-
+// Handle Stripe webhook - keeping this function for future use but it won't be called
 export const stripeWebhook = async (req: Request, res: Response) => {
-  const signature = req.headers['stripe-signature'] as string;
+  // This function is preserved for future use but is currently inactive
+  // When Stripe is re-enabled, this will be reactivated
+  console.log('Stripe webhook received but inactive - using Flutterwave for all payments');
   
-  console.log('Received Stripe webhook', {
-    signatureExists: !!signature,
-    bodyLength: req.body?.length || 0
+  // Always return 200 to prevent retries
+  return res.status(200).json({ 
+    success: true,
+    message: 'Webhook received but not processed - using Flutterwave for all payments'
   });
-  
-  if (!signature) {
-    console.error('Stripe webhook missing signature');
-    return res.status(400).json({ success: false, message: 'Stripe signature missing' });
-  }
-  
-  try {
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-      apiVersion: '2025-02-24.acacia',
-    });
-    
-
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-    if (!webhookSecret) {
-      console.error('Stripe webhook secret missing in environment variables');
-      return res.status(500).json({ success: false, message: 'Webhook secret not configured' });
-    }
-    
-    console.log('Constructing Stripe event with secret ending with:', webhookSecret.substring(webhookSecret.length - 4));
-    
-    let event;
-    try {
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        signature,
-        webhookSecret
-      );
-    } catch (err:any) {
-      console.error('Error constructing event:', err.message);
-      return res.status(400).json({ success: false, message: `Webhook signature verification failed: ${err.message}` });
-    }
-    
-    console.log('Successfully constructed event:', event.type);
-    res.status(200).json({ received: true });
-    
-    // Process the event asynchronously
-    (async () => {
-      try {
-        switch (event.type) {
-          case 'checkout.session.completed': {
-            console.log('Processing checkout.session.completed event');
-            const session = event.data.object as Stripe.Checkout.Session;
-            
-            // Get user ID from metadata
-            let userId = session.metadata?.userId;
-            
-            // If userId isn't in metadata, try to get it from the customer
-            if (!userId && session.customer) {
-              try {
-                const customer = await stripe.customers.retrieve(session.customer as string);
-                if (customer && !customer.deleted && customer.metadata?.userId) {
-                  userId = customer.metadata.userId;
-                }
-              } catch (customerErr) {
-                console.error('Error retrieving customer:', customerErr);
-              }
-            }
-            
-            console.log('Found userId:', userId);
-            
-            if (userId) {
-              try {
-                // Update user subscription
-                await updateUserSubscription(userId, session.id, 'stripe');
-                console.log(`User ${userId} upgraded to Pro plan via Stripe Checkout`);
-              } catch (updateErr) {
-                console.error('Error updating subscription:', updateErr);
-              }
-            } else {
-              console.error('Missing userId in session metadata and customer metadata');
-            }
-            break;
-          }
-            
-          case 'invoice.payment_succeeded': {
-            console.log('Processing invoice.payment_succeeded event');
-            const invoice = event.data.object as Stripe.Invoice;
-            if (invoice.subscription) {
-              try {
-                // Get the subscription
-                const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string);
-                
-                // Get user ID from metadata
-                let userId = subscription.metadata?.userId;
-                
-                // If userId isn't in metadata, try to get it from the customer
-                if (!userId && subscription.customer) {
-                  try {
-                    const customer = await stripe.customers.retrieve(subscription.customer as string);
-                    if (customer && !customer.deleted && customer.metadata?.userId) {
-                      userId = customer.metadata.userId;
-                    }
-                  } catch (customerErr) {
-                    console.error('Error retrieving customer:', customerErr);
-                  }
-                }
-                
-                console.log('Found userId for invoice:', userId);
-                
-                if (userId) {
-                  // Add payment to history
-                  await addPaymentToHistory(
-                    userId,
-                    invoice.amount_paid / 100, // Convert from cents to dollars
-                    invoice.currency.toUpperCase(),
-                    invoice.id,
-                    'stripe',
-                    'successful'
-                  );
-                  
-                  // Update user subscription
-                  await updateUserSubscription(userId);
-                  console.log(`Payment succeeded for user ${userId}`);
-                } else {
-                  console.error('Missing userId in subscription metadata and customer metadata');
-                }
-              } catch (err) {
-                console.error('Error processing invoice.payment_succeeded:', err);
-              }
-            }
-            break;
-          }
-        }
-      } catch (err) {
-        console.error('Error processing webhook event:', err);
-      }
-    })();
-    
-  } catch (error:any) {
-    console.error('Stripe webhook error:', error);
-    res.status(400).json({ success: false, message: error.message });
-  }
 };
 
 // Handle manual upgrade (for testing or admin purposes)
@@ -314,7 +182,6 @@ export const manualUpgrade = CatchAsyncError(async (req: Request, res: Response,
 });
 
 // Get subscription status
-
 export const getSubscriptionStatus = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
@@ -346,7 +213,7 @@ export const getSubscriptionStatus = CatchAsyncError(async (req: Request, res: R
         endDate,
         renewalDate: endDate,
         provider: {
-          name: 'stripe' // Default provider
+          name: 'flutterwave' // Default provider is now flutterwave
         }
       });
       
@@ -403,38 +270,26 @@ export const cancelSubscription = CatchAsyncError(async (req: Request, res: Resp
       return next(new ErrorHandler("No active subscription found", 404));
     }
     
-    // Handle based on provider
-    if (subscription.provider.name === 'stripe' && subscription.provider.stripeSubscriptionId) {
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-        apiVersion: '2025-02-24.acacia',
-      });
-      
-      // Cancel at period end
-      await stripe.subscriptions.update(subscription.provider.stripeSubscriptionId, {
-        cancel_at_period_end: true
-      });
-      
-      // Update subscription status
-      subscription.status = 'cancelled';
-      await subscription.save();
-      
-      res.status(200).json({
-        success: true,
-        message: "Subscription will be cancelled at the end of the billing period"
-      });
-    } else {
-      // For Flutterwave or other providers, cancel immediately
-      subscription.status = 'cancelled';
-      await subscription.save();
-      
-      // Update user plan to free
-      await User.findByIdAndUpdate(userId, { plan: 'free' });
-      
-      res.status(200).json({
-        success: true,
-        message: "Subscription cancelled successfully"
-      });
+    // For Flutterwave, cancel immediately
+    subscription.status = 'cancelled';
+    await subscription.save();
+    
+    // Update user plan to free at the end of the billing period
+    // We'll keep them as pro until their subscription end date
+    const user = await User.findById(userId);
+    if (user) {
+      // Only schedule downgrade if they're still on pro
+      if (user.plan === 'pro') {
+        // Store the end date for downgrading
+        user.planExpiryDate = subscription.endDate;
+        await user.save();
+      }
     }
+    
+    res.status(200).json({
+      success: true,
+      message: "Subscription cancelled successfully. Your Pro access will continue until the end of your billing period."
+    });
   } catch (error: any) {
     return next(new ErrorHandler(error.message, 500));
   }
@@ -476,7 +331,8 @@ export const flutterwaveWebhook = async (req: Request, res: Response) => {
     console.log('Received Flutterwave webhook', {
       eventType: req.body['event.type'] || req.body.event,
       txRef: req.body.txRef,
-      status: req.body.status
+      status: req.body.status,
+      currency: req.body.currency
     });
     
     // This is important: Always respond with 200 OK immediately
@@ -522,7 +378,7 @@ export const flutterwaveWebhook = async (req: Request, res: Response) => {
           }
           
           const userId = parts[2];
-          console.log(`Processing webhook for user: ${userId} with txRef: ${txRef}`);
+          console.log(`Processing webhook for user: ${userId} with txRef: ${txRef} and currency: ${currency}`);
           
           // Record payment history
           await addPaymentToHistory(
