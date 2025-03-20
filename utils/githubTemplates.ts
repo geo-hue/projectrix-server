@@ -16,7 +16,7 @@ export function generateProjectReadme(project: any): string {
   } = project;
 
   // Generate technology badges
-  const techBadges = technologies.map(tech => {
+  const techBadges = technologies.map((tech:any) => {
     const sanitizedTech = tech.toLowerCase().replace(/\s+/g, '-');
     return `![${tech}](https://img.shields.io/badge/-${encodeURIComponent(tech)}-05122A?style=flat&logo=${sanitizedTech})`;
   }).join(' ');
@@ -40,18 +40,18 @@ ${description}
 ## ✨ Features
 
 ### Core Features
-${features.core.map(feature => `- ${feature}`).join('\n')}
+${features.core.map((feature: any) => `- ${feature}`).join('\n')}
 
 ### Additional Features
-${features.additional.map(feature => `- ${feature}`).join('\n')}
+${features.additional.map((feature:any) => `- ${feature}`).join('\n')}
 
 ## 🛠️ Technologies
 
-${technologies.map(tech => `- **${tech}**`).join('\n')}
+${technologies.map((tech: any) => `- **${tech}**`).join('\n')}
 
 ## 👥 Team Structure
 
-${teamStructure.roles.map(role => {
+${teamStructure.roles.map((role: { title: any; skills: any[]; responsibilities: any[]; }) => {
   return `### ${role.title}
 - **Required Skills**: ${role.skills.join(', ')}
 - **Key Responsibilities**: ${role.responsibilities.join(', ')}
@@ -91,7 +91,7 @@ More detailed documentation can be found in the \`docs\` directory, including:
 
 This project provides opportunities to learn and practice:
 
-${learningOutcomes.map(outcome => `- ${outcome}`).join('\n')}
+${learningOutcomes.map((outcome: any) => `- ${outcome}`).join('\n')}
 
 ## 📝 License
 

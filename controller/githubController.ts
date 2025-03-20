@@ -35,7 +35,7 @@ export const initiateGitHubAuth = CatchAsyncError(async (req: Request, res: Resp
     }
     
     // Store project ID in session/redis for retrieval after OAuth
-    await redis.set(`github:auth:${req.user._id}`, projectId, 'EX', 3600); // Expires in 1 hour
+    await redis.set(`github:auth:${req.user._id}`, projectId.toString(), 'EX', 3600); // Expires in 1 hour
     
     // Redirect to GitHub OAuth
     const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${GITHUB_REDIRECT_URI}&scope=repo&state=${req.user._id}`;
@@ -183,7 +183,7 @@ export const createGitHubRepository = CatchAsyncError(async (req: Request, res: 
             ? "Repository already exists" 
             : "GitHub repository created successfully"
         });
-      } catch (error) {
+      } catch (error:any) {
         console.error('Error creating GitHub repository:', error);
         return next(new ErrorHandler(error.message || "Failed to create GitHub repository", 500));
       }
@@ -238,7 +238,7 @@ export const createGitHubRepository = CatchAsyncError(async (req: Request, res: 
         });
       } catch (repoError) {
         // If creating with organization fails, try with personal account
-        if (useOrganization && repoError.message?.includes('OAuth App access restrictions')) {
+        if (useOrganization && typeof repoError === 'object' && repoError !== null && 'message' in repoError && typeof repoError.message === 'string' && repoError.message.includes('OAuth App access restrictions')) {
           console.log('Organization creation failed due to restrictions, trying personal account...');
           
           const repository = await githubService.createRepository(
@@ -295,7 +295,7 @@ export const getGitHubRepositoryStatus = CatchAsyncError(async (req: Request, re
       // Check if user is owner or collaborator
       const isOwner = project.userId.toString() === req.user._id.toString();
       const isCollaborator = project.teamMembers?.some(
-        member => member.userId.toString() === req.user._id.toString()
+        member => member.userId.toString() === req.user?._id.toString()
       );
       
       if (!isOwner && !isCollaborator) {
@@ -366,15 +366,19 @@ export const revokeGitHubAuth = CatchAsyncError(async (req: Request, res: Respon
     if (token) {
       // Revoke token via GitHub API
       try {
-        await axios.delete(`https://api.github.com/applications/${GITHUB_CLIENT_ID}/grant`, {
-          auth: {
-            username: GITHUB_CLIENT_ID,
-            password: GITHUB_CLIENT_SECRET
-          },
-          data: {
-            access_token: token
-          }
-        });
+        if (GITHUB_CLIENT_ID && GITHUB_CLIENT_SECRET) {
+          await axios.delete(`https://api.github.com/applications/${GITHUB_CLIENT_ID}/grant`, {
+            auth: {
+              username: GITHUB_CLIENT_ID,
+              password: GITHUB_CLIENT_SECRET
+            },
+            data: {
+              access_token: token
+            }
+          });
+        } else {
+          console.error('GitHub client credentials not properly configured');
+        }
       } catch (revokeError) {
         console.error('Error revoking GitHub token:', revokeError);
         // Continue anyway to remove from Redis
@@ -420,7 +424,7 @@ export const getInvitationStatus = CatchAsyncError(async (req: Request, res: Res
     
     // Check if user is a collaborator
     const isCollaborator = project.teamMembers?.some(
-      member => member.userId.toString() === req.user._id.toString()
+      member => member.userId.toString() === req.user?._id.toString()
     );
     
     if (!isCollaborator) {

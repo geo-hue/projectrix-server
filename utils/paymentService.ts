@@ -163,7 +163,7 @@ export async function createFlutterwavePayment(
       console.error('Failed to create Flutterwave payment link:', response.data);
       throw new Error(response.data.message || 'Failed to create payment link');
     }
-  } catch (error) {
+  } catch (error:any) {
     console.error('Flutterwave payment error:', error.response?.data || error);
     throw new ErrorHandler(error.response?.data?.message || error.message || 'Failed to create payment link', 500);
   }
@@ -248,7 +248,7 @@ export async function verifyFlutterwavePayment(transactionId: string) {
         message: response.data.message || 'Payment verification failed'
       };
     }
-  } catch (error) {
+  } catch (error:any) {
     console.error('Flutterwave verification error:', error);
     throw new ErrorHandler(error.response?.data?.message || error.message || 'Failed to verify payment', 500);
   }

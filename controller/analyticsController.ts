@@ -797,7 +797,7 @@ async function calculateUserMetrics() {
     }
   ]);
   
-  const usersByTechMap = {};
+  const usersByTechMap : Record<string, number> = {};
   usersByTech.forEach(item => {
     usersByTechMap[item._id] = item.count;
   });
@@ -845,7 +845,7 @@ async function calculateProjectMetrics() {
     }
   ]);
   
-  const projectsByCategoryMap = {};
+  const projectsByCategoryMap: Record<string, number> = {};
   projectsByCategory.forEach(item => {
     projectsByCategoryMap[item._id] = item.count;
   });
@@ -861,7 +861,7 @@ async function calculateProjectMetrics() {
     }
   ]);
   
-  const projectsByTechMap = {};
+  const projectsByTechMap: Record<string, number> = {};
   projectsByTech.forEach(item => {
     projectsByTechMap[item._id] = item.count;
   });

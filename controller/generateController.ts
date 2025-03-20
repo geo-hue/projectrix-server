@@ -19,6 +19,7 @@ import {
   checkEnhancementsLimit,
   decrementEnhancements,
 } from "../utils/pricingUtils";
+import { Schema } from "mongoose";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -294,7 +295,7 @@ function validateTechnologyCategoryPair(
     const techLower = tech.toLowerCase();
 
     // Check if the technology exists in the category's tech group
-    return !categoryTechGroups[category]?.some(
+    return !categoryTechGroups[category as keyof typeof categoryTechGroups]?.some(
       (validTech: string) =>
         validTech.toLowerCase() === techLower ||
         techLower.includes(validTech.toLowerCase()) || // Check if tech contains valid tech name
@@ -773,7 +774,7 @@ export const generateProject = CatchAsyncError(
       const user = req.user;
 
       console.log("👤 Checking project limits for user:", user._id);
-      if (user.projectIdeasLeft <= 0) {
+      if (user.projectIdeasLeft === undefined || user.projectIdeasLeft <= 0) {
         console.log("❌ No project ideas left");
         return next(
           new ErrorHandler(
@@ -964,7 +965,7 @@ export const generateProject = CatchAsyncError(
       // Create activity for project generation
       await createProjectGeneratedActivity(
         user._id.toString(),
-        project._id.toString(),
+        project._id?.toString() || project.id.toString(),
         project.title
       );
 
@@ -988,7 +989,7 @@ export const generateProject = CatchAsyncError(
       });
     } catch (parseError) {
       console.error("Error parsing or validating OpenAI response:", parseError);
-      console.log("Raw response:", completion.choices[0].message.content);
+      console.log("Raw response:", "Failed to parse response content");
       return next(
         new ErrorHandler(
           "Failed to generate a valid project. Please try again.",
@@ -1177,7 +1178,7 @@ export const generateAnother = CatchAsyncError(
       // Create activity for project generation
       await createProjectGeneratedActivity(
         userId.toString(),
-        newProject._id.toString(),
+        newProject._id?.toString() || newProject.id.toString(),
         newProject.title
       );
 
@@ -1349,7 +1350,7 @@ export const publishProject = CatchAsyncError(
           }
 
           project.teamMembers.push({
-            userId,
+            userId: userId as unknown as Schema.Types.ObjectId,
             role: selectedRole,
             joinedAt: new Date(),
           });
@@ -1530,7 +1531,7 @@ export const submitUserProject = CatchAsyncError(
       // Create activity for project saving
       await createProjectSavedActivity(
         user._id.toString(),
-        project._id.toString(),
+        project._id?.toString() || project.id.toString(),
         project.title
       );
 

@@ -89,6 +89,7 @@ export interface UserDocument {
   projectIdeasLeft?: number;
   projectsGenerated?: number;
   role: string;
+  plan:string;
 }
 
 // Declare request type extension

@@ -163,7 +163,7 @@ async createRepository(
           org: orgName,
           ...createParams
         });
-      } catch (orgError) {
+      } catch (orgError:any) {
         console.error(`Failed to create repo in organization: ${orgError.message}`);
         console.log('Falling back to personal account');
         
@@ -184,7 +184,7 @@ async createRepository(
     let projectBoard = null;
     try {
       // projectBoard = await this.createProjectBoard(repo.owner.login, repo.name, project);
-    } catch (projectError) {
+    } catch (projectError:any) {
       console.warn('Could not create project board (GitHub is deprecating this feature):', projectError.message);
       // Continue without the project board
     }
@@ -207,7 +207,7 @@ async createRepository(
       html_url: repo.html_url,
       exists: false
     };
-  } catch (error) {
+  } catch (error:any) {
     console.error('Error creating GitHub repository:', error);
     throw new ErrorHandler(error.message || 'Failed to create GitHub repository', 500);
   }
@@ -329,7 +329,7 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
         
         console.log(`Added ${sanitizedUsername} as collaborator with ${permission} permission`);
         return true;
-      } catch (error) {
+      } catch (error:any) {
         console.error(`Error adding collaborator ${sanitizedUsername}:`, error);
         
         // Check if this is a not found error - user might not exist on GitHub
@@ -397,7 +397,7 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
       });
       
       return true;
-    } catch (error) {
+    } catch (error:any) {
       console.error('Error creating initial files:', error);
       throw new ErrorHandler(error.message || 'Failed to create repository files', 500);
     }
@@ -427,7 +427,7 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
       }
       
       return projectBoard;
-    } catch (error) {
+    } catch (error:any) {
       console.error('Error creating project board:', error);
       throw new ErrorHandler(error.message || 'Failed to create project board', 500);
     }
@@ -451,7 +451,7 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
             email: process.env.GITHUB_BOT_EMAIL || 'bot@projectrix.com'
           }
         });
-      } catch (dirError) {
+      } catch (dirError:any) {
         // Directory might already exist
         console.log('Docs directory might already exist or creation failed:', dirError.message);
       }
@@ -469,7 +469,7 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
             email: process.env.GITHUB_BOT_EMAIL || 'bot@projectrix.com'
           }
         });
-      } catch (rolesError) {
+      } catch (rolesError:any) {
         // Roles directory might already exist
         console.log('Roles directory might already exist or creation failed:', rolesError.message);
       }
@@ -494,7 +494,7 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
           });
           
           console.log(`Created role document for ${role}`);
-        } catch (roleError) {
+        } catch (roleError:any) {
           console.error(`Error creating role document for ${role}:`, roleError.message);
           // Continue with other roles
         }
@@ -560,7 +560,7 @@ private async createIssuesWithoutBoard(repoOwner: string, repoName: string, role
       }
       
       return true;
-    } catch (error) {
+    } catch (error:any) {
       console.error('Error creating issues:', error);
       throw new ErrorHandler(error.message || 'Failed to create issues', 500);
     }
