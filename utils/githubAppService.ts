@@ -10,15 +10,15 @@ const GITHUB_APP_INSTALLATION_ID = process.env.GITHUB_APP_INSTALLATION_ID;
 const GITHUB_APP_PRIVATE_KEY = process.env.GITHUB_APP_PRIVATE_KEY?.replace(/\\n/g, '\n');
 const GITHUB_ORG_NAME = process.env.GITHUB_ORG_NAME || 'projectrix-org';
 
-// Log configuration for debugging
+// Log configuration for debugging 
 console.log(`GitHub App Configuration:
 - App ID: ${GITHUB_APP_ID ? 'Set' : 'Not set'}
 - Installation ID: ${GITHUB_APP_INSTALLATION_ID ? 'Set' : 'Not set'}
-- Private Key: ${GITHUB_APP_PRIVATE_KEY ? 'Set' : 'Not set'}
+- Private Key: ${GITHUB_APP_PRIVATE_KEY ? 'Set' : 'Not set'} 
 - Organization: ${GITHUB_ORG_NAME}
-`);
+`); 
 
-/**
+/** 
  * Get an authenticated Octokit instance for the GitHub App
  */
 export async function getGitHubAppOctokit(): Promise<any> {

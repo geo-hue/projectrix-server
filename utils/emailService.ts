@@ -13,10 +13,11 @@ const emailConfig = {
   host: process.env.EMAIL_HOST || 'smtp.gmail.com',
   port: parseInt(process.env.EMAIL_PORT || '587'),
   secure: process.env.EMAIL_SECURE === 'true',
-  auth: {
+  auth: { 
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD,
   },
+
   from: process.env.EMAIL_FROM || 'noreply@projectrix.io',
 };
 
@@ -39,7 +40,8 @@ export const sendEmailTemplate = async (
   to: string,
   subject: string,
   templateName: string,
-  data: any = {}
+  data: any = {},
+  fromEmail?: string
 ): Promise<boolean> => {
   try {
     // Template path
@@ -51,9 +53,10 @@ export const sendEmailTemplate = async (
     // Render template with data
     const html = ejs.render(template, { ...data, year: new Date().getFullYear() });
     
+    const sender = fromEmail || emailConfig.from;
     // Send email
     const result = await transporter.sendMail({
-      from: `"Projectrix" <${emailConfig.from}>`,
+      from: `"Projectrix" <${sender}>`,
       to,
       subject,
       html,
@@ -125,7 +128,8 @@ export const sendNewsletter = async (
                 name: user.name,
                 userName: user.name,
                 userEmail: user.email,
-              }
+              },
+              'info@projectrix.app' 
             );
             
             return result;
