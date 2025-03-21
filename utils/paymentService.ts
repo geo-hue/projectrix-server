@@ -117,8 +117,10 @@ export async function createFlutterwavePayment(
     const txRef = `projectrix-${Date.now()}-${userId}`;
 
     // Get the correct amount based on currency
-    const config = PAYMENT_CONFIG[currency];
-    const amount = currency === 'USD' ? 5 : 5000; // Use display amounts here, not smallest unit
+    // Important: Use correct display amounts here, not smallest unit
+    const amount = currency === 'USD' ? 5 : 5000; // Use 5 for USD, 5000 for NGN
+    
+    console.log(`Creating Flutterwave payment with: ${currency}, amount: ${amount}`);
     
     // Create payment data with better metadata
     const paymentData = {
@@ -144,7 +146,7 @@ export async function createFlutterwavePayment(
     };
 
     // Log payment request
-    console.log(`Creating Flutterwave payment for user: ${userId} in ${currency}`);
+    console.log(`Creating Flutterwave payment:`, JSON.stringify(paymentData, null, 2));
     
     // Use the standard endpoint to create a payment link
     const response = await axios.post(
@@ -161,7 +163,8 @@ export async function createFlutterwavePayment(
       console.log('Flutterwave payment link created:', {
         link: response.data.data.link,
         txRef,
-        currency
+        currency,
+        amount
       });
       
       return {

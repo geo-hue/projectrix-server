@@ -47,19 +47,34 @@ export const createPaymentSession = CatchAsyncError(async (req: Request, res: Re
       return next(new ErrorHandler("Authentication required", 401));
     }
     
-    const { phoneNumber } = req.body;
+    const { phoneNumber, currency: requestedCurrency } = req.body;
     const userId = req.user._id;
     const email = req.user.email;
     const name = req.user.name;
     
-    // Detect the appropriate currency based on user IP or provided country
-    // For simplicity, we'll use the user's IP to determine location
+    // Log the request parameters
+    console.log('Payment session request:', {
+      userId: userId.toString(),
+      email,
+      name,
+      phoneNumber,
+      requestedCurrency
+    });
+    
+    // Detect the appropriate currency based on provided currency or user IP
+    // For simplicity, we'll prioritize the requested currency if provided
     let currency: 'NGN' | 'USD' = 'USD';
     
-    // Check if the request has a country header (this would be set by your frontend)
-    const userCountry = req.headers['x-user-country'] as string;
-    if (userCountry === 'NG') {
-      currency = 'NGN';
+    if (requestedCurrency && (requestedCurrency === 'NGN' || requestedCurrency === 'USD')) {
+      currency = requestedCurrency;
+      console.log(`Using explicitly requested currency: ${currency}`);
+    } else {
+      // Check if the request has a country header (this would be set by your frontend)
+      const userCountry = req.headers['x-user-country'] as string;
+      if (userCountry === 'NG') {
+        currency = 'NGN';
+      }
+      console.log(`Determined currency from country header: ${currency}`);
     }
     
     console.log(`Creating payment for ${name} (${email}) in ${currency}`);
@@ -69,7 +84,7 @@ export const createPaymentSession = CatchAsyncError(async (req: Request, res: Re
       return next(new ErrorHandler("Phone number is required for payment processing", 400));
     }
     
-    // Create Flutterwave payment for both NGN and USD
+    // Create Flutterwave payment with the determined currency
     const payment = await createFlutterwavePayment(
       userId.toString(), 
       email, 
@@ -78,11 +93,19 @@ export const createPaymentSession = CatchAsyncError(async (req: Request, res: Re
       currency
     );
     
+    // Log the created payment
+    console.log('Created payment:', {
+      transactionRef: payment.transactionRef,
+      currency,
+      paymentLink: payment.paymentLink
+    });
+    
     res.status(200).json({
       success: true,
       payment
     });
   } catch (error: any) {
+    console.error('Payment creation error:', error);
     return next(new ErrorHandler(error.message, 500));
   }
 });

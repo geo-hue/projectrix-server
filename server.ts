@@ -82,9 +82,22 @@ io.on('connection', (socket: any) => {
 // Set up cron jobs for scheduling tasks like monthly limit resets
 setupCronJobs();
 
+const startServer = async () => {
+  try {
+    // Connect to MongoDB
+    await connectDB();
+    
+    // Start server after successful database connection
+    const PORT = process.env.PORT || 5000;
+    server.listen(PORT, () => {
+      console.log(`🚀 Worker ${process.pid} started. Server is connected successfully with port ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV}`);
+    });
+  } catch (err) {
+    console.error('Failed to connect to database. Server not started.', err);
+    process.exit(1);
+  }
+};
+
 // Start the server
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`🚀 Server is connected successfully with port ${PORT}`);
-  connectDB();
-});
+startServer();

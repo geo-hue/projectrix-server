@@ -35,7 +35,7 @@ ${description}
 - **Complexity Level**: ${complexity.level.charAt(0).toUpperCase() + complexity.level.slice(1)} (${complexity.percentage}%)
 - **Estimated Duration**: ${duration.estimate}
 - **Team Size**: ${teamSize.count}
-- **Generated with**: [Projectrix](https://projectrix.vercel.app)
+- **Generated with**: [Projectrix](https://projectrix.app)
 
 ## ✨ Features
 
@@ -103,7 +103,7 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduc
 
 ---
 
-Generated with [Projectrix](https://projectrix.vercel.app) - AI-powered project ideas and team collaboration
+Generated with [Projectrix](https://projectrix.app) - AI-powered project ideas and team collaboration
 `;
 }
 

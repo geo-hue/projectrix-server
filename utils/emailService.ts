@@ -18,7 +18,7 @@ const emailConfig = {
     pass: process.env.EMAIL_PASSWORD,
   },
 
-  from: process.env.EMAIL_FROM || 'noreply@projectrix.io',
+  from: process.env.EMAIL_FROM || 'noreply@projectrix.app',
 };
 
 // Create a reusable transporter object
