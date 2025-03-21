@@ -34,28 +34,8 @@ export const verifyFirebaseToken = async (token: string) => {
   }
 };
 
-// Type declaration for the user document
-export interface UserDocument {
-  _id: string;
-  name: string;
-  email: string;
-  avatar: string;
-  githubId: string;
-  username: string;
-  skills: string[];
-  projectIdeasLeft?: number;
-  projectsGenerated?: number;
-  // Add other user properties as needed
-}
-
-// Declare request type extension
-declare global {
-  namespace Express {
-    interface Request {
-      user?: UserDocument;
-    }
-  }
-}
+// Remove the interface definition that was causing conflicts
+// And also remove the global declaration
 
 export const isAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -71,11 +51,11 @@ export const isAuthenticated = async (req: Request, res: Response, next: NextFun
 
     // Try getting user from cache first (Redis)
     const cachedUser = await redis.get(userId);
-    let user: UserDocument | null = null;
+    let user = null;
 
     if (cachedUser) {
       try {
-        user = JSON.parse(cachedUser) as UserDocument;
+        user = JSON.parse(cachedUser);
         console.log('✅ User found in Redis cache');
       } catch (error) {
         console.error('Error parsing cached user:', error);
@@ -95,7 +75,8 @@ export const isAuthenticated = async (req: Request, res: Response, next: NextFun
       console.log('✅ User cached in Redis');
     }
 
-    req.user = user;
+    // Use type assertion here to avoid TypeScript errors
+    req.user = user as any;
     next();
   } catch (error: any) {
     console.error('Authentication error:', error);

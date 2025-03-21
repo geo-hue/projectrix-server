@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: projectrix-api
+    env: node
+    plan: standard
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8080
+      - key: ORIGIN
+        value: https://projectrix.app
+      - key: FRONTEND_URL
+        value: https://projectrix.app
+    autoDeploy: false

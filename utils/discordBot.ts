@@ -11,6 +11,7 @@ const DISCORD_ADMIN_ROLE_ID = process.env.DISCORD_ADMIN_ROLE_ID; // Admin role I
 
 if (!DISCORD_BOT_TOKEN || !DISCORD_GUILD_ID) {
   console.error('Discord bot configuration missing. Check your environment variables.');
+  process.exit(1);
 }
 
 // Create a new client instance
@@ -48,7 +49,7 @@ export const createProjectChannel = async (projectId: string, projectTitle: stri
     }
 
     // Get the guild
-    const guild = client.guilds.cache.get(DISCORD_GUILD_ID);
+    const guild = client.guilds.cache.get(DISCORD_GUILD_ID as string);
     if (!guild) {
       throw new Error('Guild not found');
     }
@@ -82,7 +83,7 @@ export const createProjectChannel = async (projectId: string, projectTitle: stri
           },
           // Bot needs all permissions to manage the channel
           {
-            id: client.user.id,
+            id: client.user?.id || '',
             allow: [
               PermissionFlagsBits.ViewChannel,
               PermissionFlagsBits.SendMessages,
@@ -146,7 +147,7 @@ export const refreshInviteLink = async (channelId: string, projectTitle: string)
       throw new Error('Discord bot is not connected');
     }
 
-    const guild = client.guilds.cache.get(DISCORD_GUILD_ID);
+    const guild = client.guilds.cache.get(DISCORD_GUILD_ID as string);
     if (!guild) {
       throw new Error('Guild not found');
     }

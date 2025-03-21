@@ -1,0 +1,679 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.GitHubService = void 0;
+exports.getGitHubServiceForUser = getGitHubServiceForUser;
+// utils/githubService.ts
+const rest_1 = require("@octokit/rest");
+const axios_1 = __importDefault(require("axios"));
+const ErrorHandler_1 = __importDefault(require("./ErrorHandler"));
+const userModel_1 = __importDefault(require("../models/userModel"));
+const githubTemplates_1 = require("./githubTemplates");
+const redis_1 = require("./redis");
+const dotenv_1 = __importDefault(require("dotenv"));
+const githubAIService_1 = require("./githubAIService");
+const githubAppService_1 = require("./githubAppService");
+dotenv_1.default.config();
+const USE_ORGANIZATION = process.env.USE_GITHUB_ORG === 'true';
+const USE_GITHUB_APP = process.env.USE_GITHUB_APP === 'true';
+const GITHUB_ORG_NAME = process.env.GITHUB_ORG_NAME || 'projectrix-org';
+/**
+ * GitHub integration service for Projectrix
+ * Handles repository creation, team setup, and project structure
+ */
+class GitHubService {
+    /**
+     * Initialize GitHub service with a user's access token
+     */
+    constructor(accessToken, username) {
+        this.token = accessToken;
+        this.username = username;
+        this.octokit = new rest_1.Octokit({ auth: accessToken });
+    }
+    /**
+     * Create a new repository for a project
+     * @param project The project data
+     * @param owner The project owner user object
+     * @param useOrganization Whether to use Projectrix organization or personal account
+     * @param isPrivate Whether the repository should be private
+     */
+    async createRepository(project, owner, useOrganization = false, isPrivate = false) {
+        try {
+            const repoName = this.sanitizeRepoName(project.title);
+            // Check if we should use organization AND GitHub App
+            if (USE_ORGANIZATION && USE_GITHUB_APP && useOrganization) {
+                try {
+                    console.log(`Attempting to create organization repository using GitHub App: ${repoName}`);
+                    // Generate repository description
+                    const description = `${project.subtitle} - A Projectrix generated project`;
+                    // Create the repository using the GitHub App
+                    const repository = await (0, githubAppService_1.createOrgRepositoryWithApp)(repoName, description, isPrivate);
+                    // If repository was created successfully, create initial files
+                    if (!repository.exists) {
+                        // Create README
+                        const readmeContent = (0, githubTemplates_1.generateProjectReadme)(project);
+                        await (0, githubAppService_1.createOrUpdateFile)(repoName, 'README.md', readmeContent, 'Initial project setup by Projectrix');
+                        // Create .gitignore
+                        const gitignoreTemplate = this.determineGitignoreTemplate(project.technologies);
+                        const { data: gitignoreData } = await axios_1.default.get(`https://api.github.com/gitignore/templates/${gitignoreTemplate}`);
+                        await (0, githubAppService_1.createOrUpdateFile)(repoName, '.gitignore', gitignoreData.source, 'Add .gitignore');
+                        // Create CONTRIBUTING.md
+                        const contributingContent = this.generateContributingGuide(project);
+                        await (0, githubAppService_1.createOrUpdateFile)(repoName, 'CONTRIBUTING.md', contributingContent, 'Add contributing guidelines');
+                    }
+                    // Add the owner as a collaborator
+                    if (owner.username) {
+                        await (0, githubAppService_1.addCollaboratorToOrgRepo)(repoName, owner.username, 'admin');
+                    }
+                    // Return repository info
+                    return {
+                        owner: GITHUB_ORG_NAME,
+                        name: repoName,
+                        html_url: repository.html_url,
+                        exists: repository.exists
+                    };
+                }
+                catch (appError) {
+                    console.error('Error using GitHub App:', appError);
+                    console.log('Falling back to regular OAuth flow');
+                    // Continue with regular flow if GitHub App fails
+                }
+            }
+            // Check if organization usage is enabled globally via env var
+            const shouldUseOrg = USE_ORGANIZATION && useOrganization;
+            const orgName = GITHUB_ORG_NAME;
+            // Determine repo owner (organization or user)
+            const repoOwner = shouldUseOrg ? orgName : this.username;
+            // Check if repo already exists
+            try {
+                const { data: existingRepo } = await this.octokit.repos.get({
+                    owner: repoOwner,
+                    repo: repoName,
+                });
+                if (existingRepo) {
+                    console.log(`Repository ${repoOwner}/${repoName} already exists`);
+                    return {
+                        owner: repoOwner,
+                        name: repoName,
+                        html_url: existingRepo.html_url,
+                        exists: true
+                    };
+                }
+            }
+            catch (error) {
+                // Repo doesn't exist, continue with creation
+            }
+            // Generate repository description
+            const description = `${project.subtitle} - A Projectrix generated project`;
+            // Create the repository
+            const createParams = {
+                name: repoName,
+                description: description,
+                private: isPrivate,
+                auto_init: false, // We'll create files manually
+                has_issues: true,
+                has_projects: true,
+                has_wiki: true,
+            };
+            let repoResponse;
+            if (shouldUseOrg) {
+                try {
+                    repoResponse = await this.octokit.repos.createInOrg({
+                        org: orgName,
+                        ...createParams
+                    });
+                }
+                catch (orgError) {
+                    console.error(`Failed to create repo in organization: ${orgError.message}`);
+                    console.log('Falling back to personal account');
+                    // Fall back to personal account
+                    repoResponse = await this.octokit.repos.createForAuthenticatedUser(createParams);
+                }
+            }
+            else {
+                repoResponse = await this.octokit.repos.createForAuthenticatedUser(createParams);
+            }
+            const { data: repo } = repoResponse;
+            // Generate README and other base files
+            await this.createInitialFiles(repo.owner.login, repo.name, project);
+            // Try to create project board but don't fail if it doesn't work
+            let projectBoard = null;
+            try {
+                // projectBoard = await this.createProjectBoard(repo.owner.login, repo.name, project);
+            }
+            catch (projectError) {
+                console.warn('Could not create project board (GitHub is deprecating this feature):', projectError.message);
+                // Continue without the project board
+            }
+            // Generate role breakdowns and create issues
+            const roleBreakdowns = await (0, githubAIService_1.generateRoleBreakdowns)(project);
+            await this.createRoleDocuments(repo.owner.login, repo.name, roleBreakdowns);
+            // Create issues without project board
+            await this.createIssuesWithoutBoard(repo.owner.login, repo.name, roleBreakdowns);
+            // Setup branch protection
+            await this.setupBranchProtection(repo.owner.login, repo.name);
+            return {
+                owner: repo.owner.login,
+                name: repo.name,
+                html_url: repo.html_url,
+                exists: false
+            };
+        }
+        catch (error) {
+            console.error('Error creating GitHub repository:', error);
+            throw new ErrorHandler_1.default(error.message || 'Failed to create GitHub repository', 500);
+        }
+    }
+    /**
+     * Create GitHub issues from role breakdowns without adding to a project board
+     */
+    async createIssuesWithoutBoard(repoOwner, repoName, roleBreakdowns) {
+        try {
+            // Create milestone for initial sprint
+            const { data: milestone } = await this.octokit.issues.createMilestone({
+                owner: repoOwner,
+                repo: repoName,
+                title: 'Sprint 1',
+                description: 'Initial project setup and core functionality',
+                due_on: this.calculateMilestoneDueDate(30) // 30 days from now
+            });
+            // Create issues for each role
+            for (const role of Object.keys(roleBreakdowns)) {
+                const roleTasks = roleBreakdowns[role].tasks;
+                for (const task of roleTasks) {
+                    // Create the issue
+                    await this.octokit.issues.create({
+                        owner: repoOwner,
+                        repo: repoName,
+                        title: task.title,
+                        body: task.description,
+                        milestone: milestone.number,
+                        labels: ['enhancement', role.toLowerCase().replace(/\s+/g, '-')]
+                    });
+                }
+            }
+            return true;
+        }
+        catch (error) {
+            console.error('Error creating issues:', error);
+            // Don't throw error - this is a non-critical function
+            return false;
+        }
+    }
+    /**
+     * Add collaborators to the repository based on project team roles
+     */
+    async addCollaborators(repoOwner, repoName, collaborators) {
+        try {
+            const addedCollaborators = [];
+            for (const collaborator of collaborators) {
+                try {
+                    // Get GitHub username from user document
+                    const user = await userModel_1.default.findById(collaborator.userId);
+                    if (!user) {
+                        console.warn(`User not found for ID ${collaborator.userId}`);
+                        continue;
+                    }
+                    // IMPORTANT: Use githubUsername if available, fall back to username
+                    const githubUsername = user.githubUsername || user.username;
+                    if (!githubUsername) {
+                        console.warn(`GitHub username not found for user ${collaborator.userId}`);
+                        continue;
+                    }
+                    // Log the username being used
+                    console.log(`Using GitHub username: ${githubUsername} for user ${user.name} (${user._id})`);
+                    // Skip owner if they're also listed as a collaborator
+                    if (githubUsername === this.username) {
+                        console.log(`Skipping repository owner ${githubUsername} as collaborator`);
+                        continue;
+                    }
+                    const permission = this.determinePermissionLevel(collaborator.role);
+                    // Try to add collaborator
+                    const success = await this.addCollaborator(repoOwner, repoName, githubUsername, permission);
+                    if (success) {
+                        addedCollaborators.push({
+                            username: githubUsername,
+                            permission: permission
+                        });
+                    }
+                }
+                catch (collabError) {
+                    console.error(`Error processing collaborator ${collaborator.userId}:`, collabError);
+                    // Continue with other collaborators even if one fails
+                }
+            }
+            return addedCollaborators;
+        }
+        catch (error) {
+            console.error('Error adding collaborators:', error);
+            // Do not throw error, just return what we have
+            return [];
+        }
+    }
+    async addCollaborator(repoOwner, repoName, username, permission) {
+        try {
+            // Skip owner if they're being added as a collaborator
+            if (username === this.username) {
+                console.log(`Skipping repository owner ${username} as collaborator`);
+                return true;
+            }
+            // Sanitize the username - remove any @ symbol that might be present
+            const sanitizedUsername = username.replace('@', '');
+            try {
+                // Add collaborator to repository
+                await this.octokit.repos.addCollaborator({
+                    owner: repoOwner,
+                    repo: repoName,
+                    username: sanitizedUsername,
+                    permission: permission
+                });
+                console.log(`Added ${sanitizedUsername} as collaborator with ${permission} permission`);
+                return true;
+            }
+            catch (error) {
+                console.error(`Error adding collaborator ${sanitizedUsername}:`, error);
+                // Check if this is a not found error - user might not exist on GitHub
+                if (error.status === 404) {
+                    console.warn(`User ${sanitizedUsername} not found on GitHub or has different username`);
+                }
+                return false;
+            }
+        }
+        catch (error) {
+            console.error(`Error adding collaborator ${username}:`, error);
+            return false;
+        }
+    }
+    /**
+     * Create initial repository files including README
+     */
+    async createInitialFiles(repoOwner, repoName, project) {
+        try {
+            // Generate README content
+            const readmeContent = (0, githubTemplates_1.generateProjectReadme)(project);
+            // Create README.md
+            await this.octokit.repos.createOrUpdateFileContents({
+                owner: repoOwner,
+                repo: repoName,
+                path: 'README.md',
+                message: 'Initial project setup by Projectrix',
+                content: Buffer.from(readmeContent).toString('base64'),
+                committer: {
+                    name: 'Projectrix Bot',
+                    email: process.env.GITHUB_BOT_EMAIL || 'bot@projectrix.com'
+                }
+            });
+            // Create .gitignore based on project type
+            const gitignoreTemplate = this.determineGitignoreTemplate(project.technologies);
+            const { data: gitignoreData } = await axios_1.default.get(`https://api.github.com/gitignore/templates/${gitignoreTemplate}`);
+            await this.octokit.repos.createOrUpdateFileContents({
+                owner: repoOwner,
+                repo: repoName,
+                path: '.gitignore',
+                message: 'Add .gitignore',
+                content: Buffer.from(gitignoreData.source).toString('base64'),
+                committer: {
+                    name: 'Projectrix Bot',
+                    email: process.env.GITHUB_BOT_EMAIL || 'bot@projectrix.com'
+                }
+            });
+            // Create CONTRIBUTING.md
+            const contributingContent = this.generateContributingGuide(project);
+            await this.octokit.repos.createOrUpdateFileContents({
+                owner: repoOwner,
+                repo: repoName,
+                path: 'CONTRIBUTING.md',
+                message: 'Add contributing guidelines',
+                content: Buffer.from(contributingContent).toString('base64'),
+                committer: {
+                    name: 'Projectrix Bot',
+                    email: process.env.GITHUB_BOT_EMAIL || 'bot@projectrix.com'
+                }
+            });
+            return true;
+        }
+        catch (error) {
+            console.error('Error creating initial files:', error);
+            throw new ErrorHandler_1.default(error.message || 'Failed to create repository files', 500);
+        }
+    }
+    /**
+     * Create project board with automated columns
+     */
+    async createProjectBoard(repoOwner, repoName, project) {
+        try {
+            // Create project board
+            const { data: projectBoard } = await this.octokit.projects.createForRepo({
+                owner: repoOwner,
+                repo: repoName,
+                name: `${project.title} Development`,
+                body: 'Project board for tracking development progress'
+            });
+            // Create columns
+            const columns = ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'];
+            for (const column of columns) {
+                await this.octokit.projects.createColumn({
+                    project_id: projectBoard.id,
+                    name: column
+                });
+            }
+            return projectBoard;
+        }
+        catch (error) {
+            console.error('Error creating project board:', error);
+            throw new ErrorHandler_1.default(error.message || 'Failed to create project board', 500);
+        }
+    }
+    /**
+     * Create role breakdown documents in the repository
+     */
+    async createRoleDocuments(repoOwner, repoName, roleBreakdowns) {
+        try {
+            // First create the docs directory
+            try {
+                await this.octokit.repos.createOrUpdateFileContents({
+                    owner: repoOwner,
+                    repo: repoName,
+                    path: 'docs/README.md',
+                    message: 'Create docs directory',
+                    content: Buffer.from('# Project Documentation\n\nThis directory contains documentation for project roles and responsibilities.').toString('base64'),
+                    committer: {
+                        name: 'Projectrix Bot',
+                        email: process.env.GITHUB_BOT_EMAIL || 'bot@projectrix.com'
+                    }
+                });
+            }
+            catch (dirError) {
+                // Directory might already exist
+                console.log('Docs directory might already exist or creation failed:', dirError.message);
+            }
+            // Then create the roles directory
+            try {
+                await this.octokit.repos.createOrUpdateFileContents({
+                    owner: repoOwner,
+                    repo: repoName,
+                    path: 'docs/roles/README.md',
+                    message: 'Create roles directory',
+                    content: Buffer.from('# Role Documentation\n\nThis directory contains detailed documentation for each project role.').toString('base64'),
+                    committer: {
+                        name: 'Projectrix Bot',
+                        email: process.env.GITHUB_BOT_EMAIL || 'bot@projectrix.com'
+                    }
+                });
+            }
+            catch (rolesError) {
+                // Roles directory might already exist
+                console.log('Roles directory might already exist or creation failed:', rolesError.message);
+            }
+            // Now create each role document
+            for (const role of Object.keys(roleBreakdowns)) {
+                const roleContent = roleBreakdowns[role].document;
+                const rolePath = `docs/roles/${this.sanitizeFileName(role)}.md`;
+                try {
+                    // Create role document
+                    await this.octokit.repos.createOrUpdateFileContents({
+                        owner: repoOwner,
+                        repo: repoName,
+                        path: rolePath,
+                        message: `Add role breakdown for ${role}`,
+                        content: Buffer.from(roleContent).toString('base64'),
+                        committer: {
+                            name: 'Projectrix Bot',
+                            email: process.env.GITHUB_BOT_EMAIL || 'bot@projectrix.com'
+                        }
+                    });
+                    console.log(`Created role document for ${role}`);
+                }
+                catch (roleError) {
+                    console.error(`Error creating role document for ${role}:`, roleError.message);
+                    // Continue with other roles
+                }
+            }
+            return true;
+        }
+        catch (error) {
+            console.error('Error creating role documents:', error);
+            // Don't throw, just return false
+            return false;
+        }
+    }
+    /**
+     * Create GitHub issues from role breakdowns
+     */
+    async createIssuesFromBreakdowns(repoOwner, repoName, roleBreakdowns, projectId) {
+        try {
+            // Create milestone for initial sprint
+            const { data: milestone } = await this.octokit.issues.createMilestone({
+                owner: repoOwner,
+                repo: repoName,
+                title: 'Sprint 1',
+                description: 'Initial project setup and core functionality',
+                due_on: this.calculateMilestoneDueDate(30) // 30 days from now
+            });
+            // Create issues for each role
+            for (const role of Object.keys(roleBreakdowns)) {
+                const roleTasks = roleBreakdowns[role].tasks;
+                for (const task of roleTasks) {
+                    // Create the issue
+                    const { data: issue } = await this.octokit.issues.create({
+                        owner: repoOwner,
+                        repo: repoName,
+                        title: task.title,
+                        body: task.description,
+                        milestone: milestone.number,
+                        labels: ['enhancement', role.toLowerCase().replace(/\s+/g, '-')]
+                    });
+                    // Try to add issue to project board
+                    try {
+                        const columns = await this.octokit.projects.listColumns({
+                            project_id: projectId
+                        });
+                        // Add to Backlog column
+                        const backlogColumn = columns.data.find(col => col.name === 'Backlog');
+                        if (backlogColumn) {
+                            await this.octokit.projects.createCard({
+                                column_id: backlogColumn.id,
+                                content_id: issue.id,
+                                content_type: 'Issue'
+                            });
+                        }
+                    }
+                    catch (projectError) {
+                        console.error('Error adding issue to project board:', projectError);
+                        // Continue even if project board integration fails
+                    }
+                }
+            }
+            return true;
+        }
+        catch (error) {
+            console.error('Error creating issues:', error);
+            throw new ErrorHandler_1.default(error.message || 'Failed to create issues', 500);
+        }
+    }
+    async setupBranchProtection(repoOwner, repoName) {
+        try {
+            try {
+                // First, check if repository is private
+                const { data: repo } = await this.octokit.repos.get({
+                    owner: repoOwner,
+                    repo: repoName
+                });
+                if (repo.private) {
+                    console.log('Skipping branch protection for private repository (requires GitHub Pro)');
+                    return false;
+                }
+                // Only set branch protection for public repositories
+                await this.octokit.repos.updateBranchProtection({
+                    owner: repoOwner,
+                    repo: repoName,
+                    branch: 'main',
+                    required_status_checks: null,
+                    enforce_admins: false,
+                    required_pull_request_reviews: {
+                        required_approving_review_count: 1
+                    },
+                    restrictions: null
+                });
+                return true;
+            }
+            catch (error) {
+                console.error('Error setting up branch protection:', error);
+                // Don't throw error here as this is not critical
+                return false;
+            }
+        }
+        catch (error) {
+            console.error('Error setting up branch protection:', error);
+            // Don't throw error here as this is not critical
+            return false;
+        }
+    }
+    // Helper methods
+    /**
+     * Sanitize a project title to create a valid repository name
+     */
+    sanitizeRepoName(title) {
+        return title
+            .toLowerCase()
+            .replace(/[^\w\s-]/g, '') // Remove special chars
+            .replace(/\s+/g, '-') // Replace spaces with hyphens
+            .replace(/-+/g, '-') // Replace multiple hyphens with single
+            .substring(0, 100); // Truncate to reasonable length
+    }
+    /**
+     * Sanitize a role name to create a valid filename
+     */
+    sanitizeFileName(name) {
+        return name
+            .toLowerCase()
+            .replace(/[^\w\s-]/g, '')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-');
+    }
+    /**
+     * Determine the appropriate permission level for a team role
+     */
+    determinePermissionLevel(role) {
+        // Default to write access (push)
+        // Admin for project leads, read-only for special cases
+        const lowerRole = role.toLowerCase();
+        if (lowerRole.includes('lead') || lowerRole.includes('senior') || lowerRole.includes('architect')) {
+            return 'admin';
+        }
+        else if (lowerRole.includes('reviewer') || lowerRole.includes('tester')) {
+            return 'pull';
+        }
+        else {
+            return 'push'; // Default write access
+        }
+    }
+    /**
+     * Determine the appropriate gitignore template based on technologies
+     */
+    determineGitignoreTemplate(technologies) {
+        const techString = technologies.join(' ').toLowerCase();
+        if (techString.includes('node') || techString.includes('javascript') || techString.includes('typescript')) {
+            return 'Node';
+        }
+        else if (techString.includes('python') || techString.includes('django') || techString.includes('flask')) {
+            return 'Python';
+        }
+        else if (techString.includes('java') || techString.includes('spring')) {
+            return 'Java';
+        }
+        else if (techString.includes('ruby') || techString.includes('rails')) {
+            return 'Ruby';
+        }
+        else if (techString.includes('go') || techString.includes('golang')) {
+            return 'Go';
+        }
+        else if (techString.includes('c#') || techString.includes('dotnet') || techString.includes('.net')) {
+            return 'VisualStudio';
+        }
+        else {
+            return 'Node'; // Default to Node as it covers many web projects
+        }
+    }
+    /**
+     * Generate contributing guidelines for the project
+     */
+    generateContributingGuide(project) {
+        return `# Contributing to ${project.title}
+
+Thank you for considering contributing to this project! This document outlines the process for contributing to this project.
+
+## Getting Started
+
+1. Fork the repository
+2. Clone your fork: \`git clone https://github.com/YOUR-USERNAME/${this.sanitizeRepoName(project.title)}.git\`
+3. Create a branch for your feature: \`git checkout -b feature/amazing-feature\`
+
+## Development Workflow
+
+1. Make your changes
+2. Commit your changes: \`git commit -m 'Add some amazing feature'\`
+3. Push to the branch: \`git push origin feature/amazing-feature\`
+4. Open a Pull Request
+
+## Pull Request Process
+
+1. Update the README.md with details of changes if applicable
+2. Update the documentation with details of changes if needed
+3. The PR requires at least one approval from a maintainer
+4. Once approved, your PR will be merged
+
+## Code Style
+
+Please follow the coding conventions already established in the codebase.
+
+## Project Structure
+
+Please refer to the README and role documentation for details about the project structure and organization.
+
+## Role Responsibilities
+
+Each team member has specific role responsibilities. See the \`docs/roles/\` directory for detailed breakdowns of each role.
+
+## Communication
+
+- Use GitHub issues for bug reports and feature requests
+- Use pull requests for code review discussions
+- Use the project Discord channel for real-time communication
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the project's license.
+
+Thank you for your contributions!`;
+    }
+    /**
+     * Calculate a milestone due date given a number of days from now
+     */
+    calculateMilestoneDueDate(daysFromNow) {
+        const date = new Date();
+        date.setDate(date.getDate() + daysFromNow);
+        return date.toISOString();
+    }
+}
+exports.GitHubService = GitHubService;
+/**
+ * Get an authenticated GitHub service instance for a user
+ */
+async function getGitHubServiceForUser(userId) {
+    try {
+        // Get GitHub token from Redis or database
+        const githubToken = await redis_1.redis.get(`github:token:${userId}`);
+        const user = await userModel_1.default.findById(userId);
+        if (!githubToken || !user) {
+            return null;
+        }
+        return new GitHubService(githubToken, user.username);
+    }
+    catch (error) {
+        console.error('Error getting GitHub service for user:', error);
+        return null;
+    }
+}

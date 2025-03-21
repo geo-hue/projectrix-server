@@ -1,0 +1,191 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.verifyEmailConfig = exports.sendNewsletter = exports.sendSubscriptionReminderEmail = exports.sendSubscriptionExpiryEmail = exports.sendWelcomeEmail = exports.sendEmailTemplate = void 0;
+// utils/emailService.ts
+const nodemailer_1 = __importDefault(require("nodemailer"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
+const ejs_1 = __importDefault(require("ejs"));
+const userModel_1 = __importDefault(require("../models/userModel"));
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
+// Email configuration
+const emailConfig = {
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT || '587'),
+    secure: process.env.EMAIL_SECURE === 'true',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD,
+    },
+    from: process.env.EMAIL_FROM || 'noreply@projectrix.app',
+};
+// Create a reusable transporter object
+const transporter = nodemailer_1.default.createTransport({
+    host: emailConfig.host,
+    port: emailConfig.port,
+    secure: emailConfig.secure,
+    auth: emailConfig.auth,
+});
+/**
+ * Send an email using a template
+ * @param to Recipient email address
+ * @param subject Email subject
+ * @param templateName Name of the template file (without extension)
+ * @param data Template data object
+ */
+const sendEmailTemplate = async (to, subject, templateName, data = {}, fromEmail) => {
+    try {
+        // Template path
+        const templatePath = path_1.default.join(__dirname, '../templates/emails', `${templateName}.ejs`);
+        // Read template file
+        const template = fs_1.default.readFileSync(templatePath, 'utf-8');
+        // Render template with data
+        const html = ejs_1.default.render(template, { ...data, year: new Date().getFullYear() });
+        const sender = fromEmail || emailConfig.from;
+        // Send email
+        const result = await transporter.sendMail({
+            from: `"Projectrix" <${sender}>`,
+            to,
+            subject,
+            html,
+        });
+        console.log(`Email sent to ${to}. MessageId: ${result.messageId}`);
+        return true;
+    }
+    catch (error) {
+        console.error('Error sending email:', error);
+        return false;
+    }
+};
+exports.sendEmailTemplate = sendEmailTemplate;
+/**
+ * Send a welcome email to a newly registered user
+ * @param user User object containing name and email
+ */
+const sendWelcomeEmail = async (user) => {
+    const { name, email } = user;
+    return (0, exports.sendEmailTemplate)(email, 'Welcome to Projectrix!', 'welcome', {
+        name,
+        userName: name,
+        userEmail: email,
+    });
+};
+exports.sendWelcomeEmail = sendWelcomeEmail;
+/**
+ * Send a notification when subscription expires
+ * @param user User object containing name and email
+ */
+const sendSubscriptionExpiryEmail = async (user) => {
+    const { name, email } = user;
+    return (0, exports.sendEmailTemplate)(email, 'Your Projectrix Pro Subscription Has Expired', 'subscription-expiry', {
+        name,
+        userName: name,
+        userEmail: email,
+    });
+};
+exports.sendSubscriptionExpiryEmail = sendSubscriptionExpiryEmail;
+/**
+ * Send a reminder email when subscription is about to expire
+ * @param user User object containing name and email
+ * @param daysRemaining Number of days remaining in subscription
+ */
+const sendSubscriptionReminderEmail = async (user, daysRemaining) => {
+    const { name, email } = user;
+    return (0, exports.sendEmailTemplate)(email, `Your Projectrix Pro Subscription Expires in ${daysRemaining} Days`, 'subscription-reminder', {
+        name,
+        userName: name,
+        userEmail: email,
+        daysRemaining
+    });
+};
+exports.sendSubscriptionReminderEmail = sendSubscriptionReminderEmail;
+/**
+ * Send a newsletter to all subscribed users
+ * @param subject Newsletter subject
+ * @param templateName Template name to use
+ * @param data Template data
+ */
+const sendNewsletter = async (subject, templateName, data = {}) => {
+    try {
+        // Find all users who are subscribed to the newsletter
+        const users = await userModel_1.default.find({ newsletterSubscribed: true });
+        console.log(`Sending newsletter to ${users.length} users`);
+        let sentCount = 0;
+        let failedCount = 0;
+        // Send emails in batches to avoid overwhelming the email server
+        const batchSize = 50;
+        for (let i = 0; i < users.length; i += batchSize) {
+            const batch = users.slice(i, i + batchSize);
+            // Send emails in parallel for the current batch
+            const results = await Promise.all(batch.map(async (user) => {
+                try {
+                    const result = await (0, exports.sendEmailTemplate)(user.email, subject, templateName, {
+                        ...data,
+                        name: user.name,
+                        userName: user.name,
+                        userEmail: user.email,
+                    }, 'info@projectrix.app');
+                    return result;
+                }
+                catch (error) {
+                    console.error(`Failed to send newsletter to ${user.email}:`, error);
+                    return false;
+                }
+            }));
+            // Count successes and failures
+            results.forEach((result) => {
+                if (result) {
+                    sentCount++;
+                }
+                else {
+                    failedCount++;
+                }
+            });
+            // Add a small delay between batches to avoid rate limiting
+            if (i + batchSize < users.length) {
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
+        }
+        return {
+            success: failedCount === 0,
+            sentCount,
+            failedCount,
+        };
+    }
+    catch (error) {
+        console.error('Error sending newsletter:', error);
+        return {
+            success: false,
+            sentCount: 0,
+            failedCount: 0,
+        };
+    }
+};
+exports.sendNewsletter = sendNewsletter;
+// Verify email configuration on startup
+const verifyEmailConfig = async () => {
+    try {
+        if (!emailConfig.auth.user || !emailConfig.auth.pass) {
+            console.warn('Email configuration incomplete. Email sending will be disabled.');
+            return false;
+        }
+        await transporter.verify();
+        console.log('Email service is ready to send messages');
+        return true;
+    }
+    catch (error) {
+        console.error('Error verifying email configuration:', error);
+        return false;
+    }
+};
+exports.verifyEmailConfig = verifyEmailConfig;
+exports.default = {
+    sendEmailTemplate: exports.sendEmailTemplate,
+    sendWelcomeEmail: exports.sendWelcomeEmail,
+    sendNewsletter: exports.sendNewsletter,
+    verifyEmailConfig: exports.verifyEmailConfig,
+};
