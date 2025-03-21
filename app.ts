@@ -67,10 +67,9 @@ app.use(cookieParser());
 // Configure CORS more securely for production
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.ORIGIN || 'https://projectrix.app']
+    ? [process.env.ORIGIN || 'https://projectrix.app', 'https://api.projectrix.app']
     : process.env.ORIGIN || 'http://localhost:3000',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   maxAge: 86400, // 24 hours cache preflight requests
 };
