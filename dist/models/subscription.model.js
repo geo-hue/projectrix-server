@@ -80,12 +80,13 @@ const subscriptionSchema = new mongoose_1.default.Schema({
     provider: {
         name: {
             type: String,
-            enum: ['stripe', 'flutterwave'],
+            enum: ['stripe', 'flutterwave', 'promo'],
             required: true
         },
         stripeSubscriptionId: String,
         stripeCustomerId: String,
-        flutterwaveTransactionRef: String
+        flutterwaveTransactionRef: String,
+        promoCode: String
     },
     paymentHistory: [{
             amount: Number,
@@ -100,7 +101,7 @@ const subscriptionSchema = new mongoose_1.default.Schema({
             reference: String,
             provider: {
                 type: String,
-                enum: ['stripe', 'flutterwave']
+                enum: ['stripe', 'flutterwave', 'promo']
             }
         }],
     createdAt: {
@@ -117,5 +118,6 @@ subscriptionSchema.index({ userId: 1 });
 subscriptionSchema.index({ status: 1 });
 subscriptionSchema.index({ 'provider.stripeSubscriptionId': 1 });
 subscriptionSchema.index({ 'provider.flutterwaveTransactionRef': 1 });
+subscriptionSchema.index({ 'provider.promoCode': 1 });
 const Subscription = mongoose_1.default.model("Subscription", subscriptionSchema);
 exports.default = Subscription;

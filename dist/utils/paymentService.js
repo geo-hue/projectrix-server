@@ -11,7 +11,7 @@ exports.handleStripeWebhook = handleStripeWebhook;
 exports.updateUserSubscription = updateUserSubscription;
 exports.addPaymentToHistory = addPaymentToHistory;
 exports.getPricingForLocation = getPricingForLocation;
-// utils/paymentService.ts - Updated to use Flutterwave for both Nigerian and international payments
+// utils/paymentService.ts - Updated to include promo as a provider type
 const stripe_1 = __importDefault(require("stripe"));
 const flutterwave_node_v3_1 = __importDefault(require("flutterwave-node-v3"));
 const ErrorHandler_1 = __importDefault(require("./ErrorHandler"));
@@ -280,8 +280,7 @@ async function handleStripeWebhook(event) {
     }
 }
 // Update user subscription
-async function updateUserSubscription(userId, providerId = '', provider = 'flutterwave' // Default changed to flutterwave
-) {
+async function updateUserSubscription(userId, providerId = '', provider = 'flutterwave') {
     try {
         console.log(`Updating subscription for user: ${userId} via ${provider}`);
         // First update the user plan
@@ -338,10 +337,16 @@ async function updateUserSubscription(userId, providerId = '', provider = 'flutt
                         existingSubscription.provider.stripeSubscriptionId = providerId;
                     }
                 }
-                else {
+                else if (provider === 'flutterwave') {
                     existingSubscription.provider.name = 'flutterwave';
                     if (providerId) {
                         existingSubscription.provider.flutterwaveTransactionRef = providerId;
+                    }
+                }
+                else if (provider === 'promo') {
+                    existingSubscription.provider.name = 'promo';
+                    if (providerId) {
+                        existingSubscription.provider.promoCode = providerId;
                     }
                 }
                 await existingSubscription.save();
@@ -367,8 +372,11 @@ async function updateUserSubscription(userId, providerId = '', provider = 'flutt
                 if (provider === 'stripe') {
                     subscriptionData.provider.stripeSubscriptionId = providerId;
                 }
-                else {
+                else if (provider === 'flutterwave') {
                     subscriptionData.provider.flutterwaveTransactionRef = providerId;
+                }
+                else if (provider === 'promo') {
+                    subscriptionData.provider.promoCode = providerId;
                 }
                 // Create new subscription
                 const subscription = await subscription_model_1.default.create(subscriptionData);

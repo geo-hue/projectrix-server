@@ -1,4 +1,4 @@
-// utils/paymentService.ts - Updated to use Flutterwave for both Nigerian and international payments
+// utils/paymentService.ts - Updated to include promo as a provider type
 import Stripe from 'stripe';
 import Flutterwave from 'flutterwave-node-v3';
 import ErrorHandler from './ErrorHandler';
@@ -342,7 +342,7 @@ export async function handleStripeWebhook(event: Stripe.Event) {
 export async function updateUserSubscription(
   userId: string, 
   providerId: string = '', 
-  provider: 'stripe' | 'flutterwave' = 'flutterwave' // Default changed to flutterwave
+  provider: 'stripe' | 'flutterwave' | 'promo' = 'flutterwave'
 ) {
   try {
     console.log(`Updating subscription for user: ${userId} via ${provider}`);
@@ -415,10 +415,15 @@ export async function updateUserSubscription(
           if (providerId) {
             existingSubscription.provider.stripeSubscriptionId = providerId;
           }
-        } else {
+        } else if (provider === 'flutterwave') {
           existingSubscription.provider.name = 'flutterwave';
           if (providerId) {
             existingSubscription.provider.flutterwaveTransactionRef = providerId;
+          }
+        } else if (provider === 'promo') {
+          existingSubscription.provider.name = 'promo';
+          if (providerId) {
+            existingSubscription.provider.promoCode = providerId;
           }
         }
         
@@ -445,8 +450,10 @@ export async function updateUserSubscription(
         // Add provider-specific data
         if (provider === 'stripe') {
           subscriptionData.provider.stripeSubscriptionId = providerId;
-        } else {
+        } else if (provider === 'flutterwave') {
           subscriptionData.provider.flutterwaveTransactionRef = providerId;
+        } else if (provider === 'promo') {
+          subscriptionData.provider.promoCode = providerId;
         }
         
         // Create new subscription
@@ -474,7 +481,7 @@ export async function addPaymentToHistory(
   amount: number,
   currency: string,
   reference: string,
-  provider: 'stripe' | 'flutterwave',
+  provider: 'stripe' | 'flutterwave' | 'promo',
   status: 'successful' | 'failed' | 'pending' = 'successful'
 ) {
   try {

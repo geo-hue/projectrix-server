@@ -25,6 +25,7 @@ const analyticsRoutes_1 = __importDefault(require("./routes/analyticsRoutes"));
 const paymentRoutes_1 = __importDefault(require("./routes/paymentRoutes"));
 const githubRoutes_1 = __importDefault(require("./routes/githubRoutes"));
 const emailRoutes_1 = __importDefault(require("./routes/emailRoutes"));
+const promoCodeRoutes_1 = __importDefault(require("./routes/promoCodeRoutes"));
 exports.app.post("/api/v1/webhooks/stripe", express_1.default.raw({ type: 'application/json' }), (req, res) => {
     const { stripeWebhook } = require('./controller/paymentController');
     stripeWebhook(req, res);
@@ -53,8 +54,10 @@ exports.app.use("/api/v1", feedbackRoutes_1.default);
 exports.app.use("/api/v1", discordRoutes_1.default);
 exports.app.use("/api/v1", emailRoutes_1.default);
 exports.app.use("/api/v1", activityRoutes_1.default);
+exports.app.use("/api/v1", promoCodeRoutes_1.default);
 exports.app.use("/api/v1", analyticsRoutes_1.default);
 exports.app.use("/api/v1", adminUsersRoutes_1.default);
+;
 exports.app.get("/test", (req, res, next) => {
     res.status(200).json({
         success: "true",
