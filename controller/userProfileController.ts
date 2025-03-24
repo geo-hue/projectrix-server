@@ -122,12 +122,12 @@ export const getPublicProfile = CatchAsyncError(async (req: Request, res: Respon
 
     // Get user profile
     const profile = await UserProfile.findOne({ userId: user._id });
-    
+     
     // Get published projects
-    const publishedProjects = await GeneratedProject.find({ 
-      userId: user._id,
-      isPublished: true
-    }).select('title subtitle description technologies complexity teamStructure duration teamSize createdAt');
+const publishedProjects = await GeneratedProject.find({ 
+  userId: user._id,
+  isPublished: true
+}).select('title subtitle description technologies complexity teamStructure duration teamSize features learningOutcomes createdAt');
 
     // Count collaborations
     const collaborationsCount = user.projectsCollaborated || 0;
