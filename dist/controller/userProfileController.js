@@ -109,7 +109,7 @@ exports.getPublicProfile = (0, catchAsyncErrors_1.CatchAsyncError)(async (req, r
         const publishedProjects = await generateProject_model_1.default.find({
             userId: user._id,
             isPublished: true
-        }).select('title subtitle description technologies complexity teamStructure duration teamSize createdAt');
+        }).select('title subtitle description technologies complexity teamStructure duration teamSize features learningOutcomes createdAt');
         // Count collaborations
         const collaborationsCount = user.projectsCollaborated || 0;
         // Prepare the response
