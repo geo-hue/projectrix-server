@@ -174,15 +174,17 @@ export const incrementPublishedProjects = async (userId: string): Promise<void> 
 export const initializeUserPlanLimits = (user: any): void => {
   // Set initial values based on plan
   if (user.plan === 'pro') {
-  
-    user.projectIdeasLeft = 10;
-    user.collaborationRequestsLeft = 999999; // Effectively unlimited
-    user.enhancementsLeft = 8;   // Pro users get 8 enhancements
+  // Pro users get monthly limits that will reset
+  user.projectIdeasLeft = 10;
+  user.collaborationRequestsLeft = 999999; // Effectively unlimited
+  user.enhancementsLeft = 8;   // Pro users get 8 enhancements
   } else {
     // Free users get 3 project ideas and 3 collaboration requests and 2 enhancements per month
-    user.projectIdeasLeft = 3;
-    user.collaborationRequestsLeft = 3;
-    user.enhancementsLeft = 2;
+   // Free users get one-time limits that never reset
+    // Only set these if the user is brand new (doesn't already have values)
+    if (user.projectIdeasLeft === undefined) user.projectIdeasLeft = 3;
+    if (user.collaborationRequestsLeft === undefined) user.collaborationRequestsLeft = 3;
+    if (user.enhancementsLeft === undefined) user.enhancementsLeft = 2;
   }
 };
 
@@ -193,15 +195,16 @@ export const resetMonthlyLimits = async (userId: string): Promise<void> => {
     throw new ErrorHandler('User not found', 404);
   }
   
+  // Only reset limits for Pro users
   if (user.plan === 'pro') {
     user.projectIdeasLeft = 10;
     user.collaborationRequestsLeft = 999999; // Effectively unlimited
     user.enhancementsLeft = 8;
-  } else {
-    user.projectIdeasLeft = 3;
-    user.collaborationRequestsLeft = 3;
-    user.enhancementsLeft = 2;
+    
+    // Update last reset date
+    user.lastLimitResetDate = new Date();
+    
+    await user.save();
   }
-  
-  await user.save();
+  // Free users don't get resets - their limits remain as is
 };

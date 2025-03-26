@@ -543,7 +543,7 @@ Return the enhanced project in this exact JSON format:
     console.log("\n📡 Sending enhancement request to OpenAI...");
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "o3-mini",
       messages: [
         {
           role: "system",
@@ -555,8 +555,8 @@ Return the enhanced project in this exact JSON format:
           content: enhancementPrompt,
         },
       ],
-      temperature: 0.5, // Lower temperature for more consistent enhancements
-      max_tokens: 2500,
+      // temperature: 0.5, // Lower temperature for more consistent enhancements
+      max_completion_tokens: 2500, // to switch back to 4o mini change it back to max_tokens
       response_format: { type: "json_object" },
     });
 
@@ -810,7 +810,7 @@ export const generateProject = CatchAsyncError(
 
       console.log("\n📡 Sending request to OpenAI...");
       const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "o3-mini",
         messages: [
           {
             role: "system",
@@ -822,8 +822,8 @@ export const generateProject = CatchAsyncError(
             content: prompt,
           },
         ],
-        temperature: 0.8,
-        max_tokens: 2500,
+        // temperature: 0.8,
+        max_completion_tokens: 2500,
         response_format: { type: "json_object" },
       });
 
@@ -1068,7 +1068,7 @@ export const generateAnother = CatchAsyncError(
 
       console.log("\n📡 Sending request to OpenAI...");
       const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "o3-mini",
         messages: [
           {
             role: "system",
@@ -1080,8 +1080,8 @@ export const generateAnother = CatchAsyncError(
             content: prompt,
           },
         ],
-        temperature: 0.8, // Slightly higher temperature for more variation
-        max_tokens: 2500,
+        // temperature: 0.8, // Slightly higher temperature for more variation
+        max_completion_tokens: 2500,
         response_format: { type: "json_object" },
       });
 

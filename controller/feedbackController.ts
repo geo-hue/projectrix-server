@@ -71,15 +71,24 @@ export const getMyFeedback = CatchAsyncError(async (req: Request, res: Response,
 // Get public feedback
 export const getPublicFeedback = CatchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { category, status, sort = 'upvotes', order = 'desc', limit = '50' } = req.query;
+    const { 
+      category, 
+      status, 
+      sort = 'createdAt', 
+      order = 'desc', 
+      page = '1',
+      pageSize = '10'
+    } = req.query;
 
     // Build query
     const query: any = {};
     if (category) query.category = category;
     if (status) query.status = status;
 
-    // Parse limit
-    const limitNum = parseInt(limit as string) || 50;
+    // Parse pagination parameters
+    const currentPage = parseInt(page as string) || 1;
+    const limit = parseInt(pageSize as string) || 10;
+    const skip = (currentPage - 1) * limit;
 
     // Sort options
     const sortOptions: any = {};
@@ -90,15 +99,25 @@ export const getPublicFeedback = CatchAsyncError(async (req: Request, res: Respo
       sortOptions['createdAt'] = order === 'asc' ? 1 : -1;
     }
 
-    // Execute query
+    // Get total count for pagination
+    const totalCount = await Feedback.countDocuments(query);
+    
+    // Calculate total pages
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Execute query with pagination
     const feedback = await Feedback.find(query)
       .sort(sortOptions)
-      .limit(limitNum)
+      .skip(skip)
+      .limit(limit)
       .populate('userId', 'name username avatar');
 
     res.status(200).json({
       success: true,
       count: feedback.length,
+      totalCount,
+      totalPages,
+      currentPage,
       feedback
     });
   } catch (error: any) {

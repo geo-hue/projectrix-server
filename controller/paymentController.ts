@@ -305,6 +305,12 @@ export const cancelSubscription = CatchAsyncError(async (req: Request, res: Resp
       if (user.plan === 'pro') {
         // Store the end date for downgrading
         user.planExpiryDate = subscription.endDate;
+        
+        // Store their current usage counts for after downgrade
+        // These will be used to determine if they've already exceeded free limits
+        user.proCancelProjectsCreated = user.projectsGenerated || 0;
+        user.proCancelPublishedCount = user.publishedProjectsCount || 0;
+        
         await user.save();
       }
     }

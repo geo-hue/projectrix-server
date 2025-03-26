@@ -41,6 +41,8 @@ export interface IUser extends Document {
   enhancementsLeft: number;
   nextLimitResetDate?: Date; // New field for user-specific limit resets
   lastLimitResetDate?: Date; // New field to track when limits were last reset
+  proCancelProjectsCreated?: number;
+  proCancelPublishedCount?: number;
   comparePassword(password: string): Promise<boolean>;
   SignAccessToken(): string;
   SignRefreshToken(): string;
@@ -186,6 +188,12 @@ const userSchema: Schema<IUser> = new mongoose.Schema({
   },
   lastLimitResetDate: {
     type: Date
+  },
+  proCancelProjectsCreated: {
+    type: Number
+  },
+  proCancelPublishedCount: {
+    type: Number
   }
 });
 
@@ -195,15 +203,21 @@ userSchema.pre('save', function(next) {
   if (this.isModified('plan')) {
     // Reset user limits based on new plan
     if (this.plan === 'pro') {
+      // When upgrading to pro, always reset to full pro limits
       this.projectIdeasLeft = 10;
       this.collaborationRequestsLeft = 999999; // Effectively unlimited
       this.enhancementsLeft = 8;
-    } else if (this.plan === 'free') {
-      // If downgrading from pro to free, set reasonable limits
-      this.projectIdeasLeft = Math.min(this.projectIdeasLeft, 3);
-      this.collaborationRequestsLeft = Math.min(this.collaborationRequestsLeft, 3);
-      this.enhancementsLeft = Math.min(this.enhancementsLeft, 2);
-    }
+      
+      // Set next reset date (30 days from now)
+      const nextReset = new Date();
+      nextReset.setDate(nextReset.getDate() + 30);
+      this.nextLimitResetDate = nextReset;
+      
+      // Record today as last reset date
+      this.lastLimitResetDate = new Date();
+    } 
+    // When downgrading to free, we DON'T reset limits
+    // Free users keep whatever they currently have, but won't get more
   }
   
   next();
