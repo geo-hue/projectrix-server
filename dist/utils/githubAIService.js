@@ -58,7 +58,7 @@ async function generateRoleDocument(project, role) {
         const prompt = constructRoleDocumentPrompt(project, role);
         // Make the OpenAI API call 
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "o3-mini",
             messages: [
                 {
                     role: "system",
@@ -69,8 +69,8 @@ async function generateRoleDocument(project, role) {
                     content: prompt
                 }
             ],
-            temperature: 0.3, // Lower temperature for more consistent, factual output
-            max_tokens: 3000 // Allow for detailed document
+            // temperature: 0.3, // Lower temperature for more consistent, factual output
+            max_completion_tokens: 3000 // Allow for detailed document
         });
         // Extract content from response
         let content = response.choices[0].message.content || '';
@@ -102,7 +102,7 @@ async function generateRoleTasks(project, role) {
         const prompt = constructRoleTasksPrompt(project, role);
         // Make the OpenAI API call
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "o3-mini",
             messages: [
                 {
                     role: "system",
@@ -113,8 +113,8 @@ async function generateRoleTasks(project, role) {
                     content: prompt
                 }
             ],
-            temperature: 0.2, // Lower temperature for more consistent, practical output
-            max_tokens: 2000, // Allow for detailed tasks
+            // temperature: 0.2, // Lower temperature for more consistent, practical output
+            max_completion_tokens: 2000, // Allow for detailed tasks
             response_format: { type: "json_object" } // Request JSON response
         });
         // Extract content from response

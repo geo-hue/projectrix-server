@@ -38,7 +38,7 @@ const promoCodeSchema = new mongoose_1.default.Schema({
     code: {
         type: String,
         required: [true, "Promo code is required"],
-        unique: true,
+        // unique: true,
         uppercase: true,
         trim: true
     },
