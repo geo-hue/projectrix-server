@@ -27,6 +27,8 @@ const githubRoutes_1 = __importDefault(require("./routes/githubRoutes"));
 const emailRoutes_1 = __importDefault(require("./routes/emailRoutes"));
 const promoCodeRoutes_1 = __importDefault(require("./routes/promoCodeRoutes"));
 const rateLimiter_1 = require("./middleware/rateLimiter");
+const compression_1 = require("./middleware/compression");
+const cacheMiddleware_1 = require("./middleware/cacheMiddleware");
 exports.app.post("/api/v1/webhooks/stripe", express_1.default.raw({ type: 'application/json' }), (req, res) => {
     const { stripeWebhook } = require('./controller/paymentController');
     stripeWebhook(req, res);
@@ -43,7 +45,11 @@ exports.app.use((0, cors_1.default)({
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
+exports.app.use(compression_1.compressionMiddleware);
+exports.app.use(compression_1.securityHeaders);
 exports.app.use(requestLogger_1.requestLogger);
+exports.app.use(rateLimiter_1.apiRateLimiter);
+exports.app.use(cacheMiddleware_1.staticCacheControl);
 exports.app.use("/api/v1", userRoute_1.default);
 exports.app.use("/api/v1", generateRoute_1.default);
 exports.app.use("/api/v1", userProfileRoutes_1.default);

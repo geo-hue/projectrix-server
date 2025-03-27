@@ -13,13 +13,17 @@ const userModel_1 = __importDefault(require("../models/userModel"));
 const activityUtils_1 = require("../utils/activityUtils");
 const pricingUtils_1 = require("../utils/pricingUtils");
 const pricingUtils_2 = require("../utils/pricingUtils");
+const circuitBreaker_1 = require("../utils/circuitBreaker");
 const openai = new openai_1.default({
     apiKey: process.env.OPENAI_API_KEY,
     defaultHeaders: {
         "HTTP-Referer": process.env.FRONTEND_URL || "https://projectrix.vercel.app",
         "X-Title": "Projectrix",
     },
+    timeout: 60000, // 60 second timeout
+    maxRetries: 2
 });
+const openaiBreaker = new circuitBreaker_1.CircuitBreaker(3, 60000);
 /**
  * Generate an optimized prompt for OpenAI based on user preferences
  */
@@ -82,12 +86,17 @@ Make sure the project is:
 2. Educational and helps team members grow their skills
 3. Appropriately scoped for the complexity level (${complexity.level})
 4. Well-structured with clear responsibilities for each team role
-5. Detailed enough to start implementation with clear requirements
+5. Thoroughly explained with implementation details
 
 The response should include:
 1. A creative and descriptive project title
 2. A concise subtitle that summarizes the project
-3. A detailed project description (at least 100 words)
+3. A comprehensive project description (at least 150 words) that explains:
+   - The purpose and value of the project
+   - How the technologies work together
+   - The architecture and data flow
+   - Key challenges and how to approach them
+   - Implementation strategy and timeline considerations
 4. Core features (must-have functionality)
 5. Additional features (nice-to-have extensions)
 6. Team structure with ${exactTeamSize ? `EXACTLY ${exactTeamSize}` : 'appropriate number of'} specific roles, required skills for each role, and their responsibilities
@@ -755,22 +764,34 @@ exports.generateProject = (0, catchAsyncErrors_1.CatchAsyncError)(async (req, re
         });
         console.log("📝 Prompt created for OpenAI");
         console.log("\n📡 Sending request to OpenAI...");
-        const completion = await openai.chat.completions.create({
-            model: "o3-mini",
-            messages: [
-                {
-                    role: "system",
-                    content: "You are an expert software architect and creative project planner. Your role is to generate detailed, innovative, and practical software project ideas based on user requirements. Return responses as raw JSON without LaTeX formatting like \\boxed{}.",
-                },
-                {
-                    role: "user",
-                    content: prompt,
-                },
-            ],
-            // temperature: 0.8,
-            max_completion_tokens: 2500,
-            response_format: { type: "json_object" },
-        });
+        let completion;
+        try {
+            completion = await openaiBreaker.execute(async () => {
+                return await openai.chat.completions.create({
+                    model: "o3-mini",
+                    messages: [
+                        {
+                            role: "system",
+                            content: "You are an expert software architect and creative project planner. Your role is to generate detailed, innovative, and practical software project ideas based on user requirements. Return responses as raw JSON without LaTeX formatting like \\boxed{}.",
+                        },
+                        {
+                            role: "user",
+                            content: prompt,
+                        },
+                    ],
+                    max_completion_tokens: 2500,
+                    response_format: { type: "json_object" },
+                });
+            });
+        }
+        catch (error) {
+            if (error.message === 'Circuit is open') {
+                return next(new ErrorHandler_1.default("We're experiencing high demand for AI project generation. Please try again in a minute.", 503));
+            }
+            // Handle other OpenAI errors
+            console.error('OpenAI API error:', error);
+            return next(new ErrorHandler_1.default("Unable to generate project at this time. Please try again later.", 500));
+        }
         console.log("\n✨ OpenAI Response received");
         let projectData;
         console.log("Completion response structure:", JSON.stringify(completion, null, 2));

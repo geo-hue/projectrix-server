@@ -4,14 +4,28 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.redis = void 0;
+// utils/redis.ts
 const ioredis_1 = require("ioredis");
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
-const redisClient = () => {
-    if (process.env.REDIS_URL) {
-        console.log(`Redis Connected`);
-        return process.env.REDIS_URL;
+// Configure Redis client with connection pool options
+const redisOptions = {
+    maxRetriesPerRequest: 3,
+    connectTimeout: 10000,
+    // Retry strategy with exponential backoff
+    retryStrategy(times) {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
     }
-    throw new Error('Redis connection failed');
 };
-exports.redis = new ioredis_1.Redis(redisClient());
+exports.redis = new ioredis_1.Redis(process.env.REDIS_URL || 'redis://localhost:6379', redisOptions);
+// Add event handlers for better error recovery
+exports.redis.on('error', (err) => {
+    console.error('Redis error:', err);
+});
+exports.redis.on('connect', () => {
+    console.log('Redis connected');
+});
+exports.redis.on('reconnecting', () => {
+    console.log('Redis reconnecting');
+});

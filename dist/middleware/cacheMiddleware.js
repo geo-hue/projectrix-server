@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.invalidateCache = exports.technologiesCache = exports.userProfileCache = exports.projectListingCache = exports.cacheMiddleware = void 0;
+exports.staticCacheControl = exports.invalidateCache = exports.technologiesCache = exports.userProfileCache = exports.projectListingCache = exports.cacheMiddleware = void 0;
 const redis_1 = require("../utils/redis");
 /**
  * Middleware to cache API responses
@@ -104,3 +104,14 @@ const invalidateCache = async (pattern) => {
     }
 };
 exports.invalidateCache = invalidateCache;
+const staticCacheControl = (req, res, next) => {
+    // Set Cache-Control headers for API responses that don't change often
+    if (req.method === 'GET') {
+        if (req.path.includes('/published-projects/technologies') ||
+            req.path.includes('/published-projects/roles')) {
+            res.set('Cache-Control', 'public, max-age=3600'); // 1 hour
+        }
+    }
+    next();
+};
+exports.staticCacheControl = staticCacheControl;

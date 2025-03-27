@@ -128,3 +128,14 @@ export const invalidateCache = async (pattern: string): Promise<void> => {
     console.error('Cache invalidation error:', error);
   }
 };
+
+export const staticCacheControl = (req: Request, res: Response, next: NextFunction) => {
+  // Set Cache-Control headers for API responses that don't change often
+  if (req.method === 'GET') {
+    if (req.path.includes('/published-projects/technologies') || 
+        req.path.includes('/published-projects/roles')) {
+      res.set('Cache-Control', 'public, max-age=3600'); // 1 hour
+    }
+  }
+  next();
+};

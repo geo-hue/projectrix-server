@@ -20,7 +20,9 @@ import paymentRouter from "./routes/paymentRoutes";
 import githubRouter from "./routes/githubRoutes";
 import emailRouter from "./routes/emailRoutes";
 import promoCodeRouter from "./routes/promoCodeRoutes";
-import { projectGenerationRateLimiter } from "./middleware/rateLimiter";
+import { apiRateLimiter, projectGenerationRateLimiter } from "./middleware/rateLimiter";
+import { compressionMiddleware, securityHeaders } from "./middleware/compression";
+import { staticCacheControl } from "./middleware/cacheMiddleware";
 
 app.post("/api/v1/webhooks/stripe", 
     express.raw({ type: 'application/json' }), 
@@ -51,8 +53,11 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-
+app.use(compressionMiddleware);
+app.use(securityHeaders); 
 app.use(requestLogger);
+app.use(apiRateLimiter);
+app.use(staticCacheControl);
 
 app.use("/api/v1", userRouter);
 app.use("/api/v1", generateRouter);
