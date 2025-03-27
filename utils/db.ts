@@ -6,14 +6,19 @@ import mongoose from 'mongoose';
  const dbUrl: string = process.env.DB_URL || '';
  
  const connectDB = async () => {
-     try {
-         await mongoose.connect(dbUrl).then((data: any) => {
-             console.log(`Database connected with ${data.connection.host}`);
-         });
-     } catch (error: any) {
-         console.log(error.message);
-         setTimeout(connectDB, 5000);
-     }
- };
+    try {
+        await mongoose.connect(dbUrl, {
+            maxPoolSize: 50,  // Adjust based on expected concurrent users
+            minPoolSize: 10,  // Maintain minimum connections
+            socketTimeoutMS: 45000, // Prevent long-running queries
+            serverSelectionTimeoutMS: 5000, // Faster failure detection
+        }).then((data: any) => {
+            console.log(`Database connected with ${data.connection.host}`);
+        });
+    } catch (error: any) {
+        console.log(error.message);
+        setTimeout(connectDB, 5000);
+    }
+};
  
  export default connectDB;
