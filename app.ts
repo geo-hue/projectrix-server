@@ -20,6 +20,7 @@ import paymentRouter from "./routes/paymentRoutes";
 import githubRouter from "./routes/githubRoutes";
 import emailRouter from "./routes/emailRoutes";
 import promoCodeRouter from "./routes/promoCodeRoutes";
+import { projectGenerationRateLimiter } from "./middleware/rateLimiter";
 
 app.post("/api/v1/webhooks/stripe", 
     express.raw({ type: 'application/json' }), 
@@ -67,7 +68,9 @@ app.use("/api/v1", activityRouter);
 app.use("/api/v1", promoCodeRouter);
 app.use("/api/v1", analyticsRouter);
 app.use("/api/v1", adminUsersRouter);
-;
+
+
+app.use("/api/v1/generate", projectGenerationRateLimiter);
 
 app.get("/test", (req:Request, res:Response, next:NextFunction) => {
     res.status(200).json({

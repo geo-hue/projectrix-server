@@ -7,9 +7,15 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const dbUrl = process.env.DB_URL || '';
+const options = {
+    maxPoolSize: 15, // More conservative pool size
+    minPoolSize: 3,
+    socketTimeoutMS: 45000,
+    connectTimeoutMS: 10000,
+};
 const connectDB = async () => {
     try {
-        await mongoose_1.default.connect(dbUrl).then((data) => {
+        await mongoose_1.default.connect(dbUrl, options).then((data) => {
             console.log(`Database connected with ${data.connection.host}`);
         });
     }

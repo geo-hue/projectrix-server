@@ -5,9 +5,16 @@ dotenv.config();
 
 const dbUrl: string = process.env.DB_URL || '';
 
-const connectDB = async () => {
+const options = {
+    maxPoolSize: 15, // More conservative pool size
+    minPoolSize: 3,
+    socketTimeoutMS: 45000,
+    connectTimeoutMS: 10000,
+  };
+  
+  const connectDB = async () => {
     try {
-        await mongoose.connect(dbUrl).then((data: any) => {
+        await mongoose.connect(dbUrl, options).then((data: any) => {
             console.log(`Database connected with ${data.connection.host}`);
         });
     } catch (error: any) {
