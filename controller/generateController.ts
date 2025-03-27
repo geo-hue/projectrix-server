@@ -39,6 +39,7 @@ function getOptimizedPrompt(preferences: any) {
     complexity,
     duration,
     teamSize,
+    exactTeamSize,
     category,
     projectTheme,
   } = preferences;
@@ -52,12 +53,18 @@ function getOptimizedPrompt(preferences: any) {
       : "long-term (3+ months)";
 
   // Generate team size text
-  const teamSizeText =
-    teamSize === "solo"
-      ? "exactly one developer"
-      : teamSize === "small"
-      ? "exactly 2-3 team members, no more and no less"
+  let teamSizeText;
+  if (teamSize === "solo") {
+    teamSizeText = "exactly one developer";
+  } else if (teamSize === "small") {
+    teamSizeText = exactTeamSize 
+      ? `exactly ${exactTeamSize} team members`
+      : "exactly 2-3 team members, no more and no less";
+  } else { // medium
+    teamSizeText = exactTeamSize
+      ? `exactly ${exactTeamSize} team members`
       : "exactly 4-6 team members, no more and no less";
+  }
 
   // Format technologies list if provided
   const techList =
@@ -85,6 +92,7 @@ IMPORTANT CONSTRAINTS:
 2. If the specified team size is 4-6 members, provide between 4 and 6 team roles, not more and not less.
 3. For solo projects, provide exactly 1 role.
 4. Do not exceed the maximum number of roles for the specified team size under any circumstance.
+${exactTeamSize ? `5. You MUST create EXACTLY ${exactTeamSize} team roles as the user specifically requested this number.` : ''}
 
 Make sure the project is:
 1. Practical and realistic to implement within the given timeframe and team size
@@ -176,143 +184,230 @@ function getCategorySpecificGuidance(category: string, technologies: string[]) {
 }
 
 /**
- * Validate if the selected technologies make sense for the chosen category
+ * Improved validation for technology and category combinations
+ * This validator is more flexible and user-friendly
  */
 function validateTechnologyCategoryPair(
   technologies: string[],
   category: string
-): { valid: boolean; message: string } {
+): { valid: boolean; message: string; suggestedCategory?: string; warning?: boolean } {
   // If no technologies are selected, it's always valid
   if (!technologies || technologies.length === 0) {
     return { valid: true, message: "" };
   }
 
-  // Define category-specific technology groups
+  // Normalize the category
+  const categoryLower = category.toLowerCase();
+
+  // Define technology groups specifically matching the frontend TechSelect component values
+  // These values are all lowercase, without spaces, as used in your TechSelect component
   const categoryTechGroups = {
     web: [
-      "react",
-      "angular",
-      "vue",
-      "svelte",
-      "nextjs",
-      "html5",
-      "css3",
-      "javascript",
-      "typescript",
-      "nodejs",
-      "express",
-      "django",
-      "flask",
-      "php",
-      "laravel",
-      "ruby",
-      "rails",
-      "mongodb",
-      "postgresql",
-      "mysql",
-      "firebase",
-      "graphql",
-      "tailwindcss",
-      "bootstrap",
-      "springboot",
+      // Core frontend technologies from your TechSelect component
+      "react", "nextjs", "vue", "angular", "svelte", "html5", "css3", "javascript", 
+      "typescript", "tailwindcss", "bootstrap", "redux", "webpack", "vite",
+      // Backend technologies
+      "nodejs", "express", "django", "flask", "php", "laravel", "ruby", "rails",
+      "springboot", "dotnet", "csharp", "python", "go", "rust",
+      // Databases
+      "mongodb", "postgresql", "mysql", "redis", "firebase", "supabase", "sqlite",
+      // API and communication
+      "rest", "graphql", "apollo", "trpc", "axios", "fetch",
+      // Tooling & Deployment
+      "docker", "kubernetes", "aws", "azure", "vercel", "netlify", "heroku", "github",
+      "gitlab", "jest", "cypress", "storybook",
+      // State management
+      "redux", "mobx", "zustand", "recoil", "context", "jotai",
+      // UI libraries
+      "materialui", "chakraui", "mui", "antd", "shadcn", "styledcomponents",
+      // CSS related
+      "sass", "less", "emotion", "css", "cssmodules", "postcss", "windicss",
+      // Frameworks
+      "qwik", "remix", "astro", "nuxt", "sveltekit", "gatsby"
     ],
-
     mobile: [
-      "react",
-      "reactnative",
-      "flutter",
-      "swift",
-      "kotlin",
-      "java",
-      "javascript",
-      "typescript",
-      "firebase",
-      "redux",
-      "sqlite",
-      "mongodb",
-      "nodejs",
+      // Cross-platform frameworks
+      "reactnative", "flutter", "ionic", "xamarin", "nativescript", "capacitor", "cordova",
+      // Native languages & frameworks
+      "swift", "kotlin", "java", "objectivec", "android", "ios", "swiftui", "jetpack",
+      // Libraries & tools
+      "expo", "nativebase", "firebase", "redux", "mobx", "sqlite", "realm", "amplify",
+      // Development tools
+      "androidstudio", "xcode", "appium", "detox", "testflight",
+      // Technologies from web that are often used in mobile
+      "typescript", "javascript", "graphql", "rest", "axios", "jwt",
+      // Services
+      "push", "geolocation", "camera", "biometrics", "maps", "notifications",
+      "analytics", "storage", "deeplink"
     ],
-
     ai: [
-      "python",
-      "tensorflow",
-      "pytorch",
-      "scikit-learn",
-      "numpy",
-      "pandas",
-      "jupyter",
-      "r",
-      "julia",
-      "keras",
-      "opencv",
-      "nltk",
-      "spacy",
-      "huggingface",
+      // Core AI/ML libraries
+      "python", "tensorflow", "pytorch", "scikit-learn", "sklearn", "keras", "huggingface",
+      "transformers", "xgboost", "lightgbm", "fastai", "jax", "torchvision", "onnx",
+      // Data processing
+      "numpy", "pandas", "dask", "scipy", "spark", "hadoop", "polars", "arrow", "vaex",
+      // Visualization
+      "matplotlib", "seaborn", "plotly", "bokeh", "altair", "graphviz",
+      // NLP
+      "nltk", "spacy", "gensim", "transformers", "bert", "gpt", "llm", "langchain",
+      "tokenizers", "sentencepiece", "word2vec", "glove", "allennlp",
+      // Computer Vision
+      "opencv", "pillow", "imageio", "albumentations", "detectron", "yolo", "mmdetection",
+      "segmentation", "mediapipe", "kornia",
+      // MLOps
+      "mlflow", "kubeflow", "airflow", "prefect", "kedro", "ray", "wandb", "dvc",
+      "tensorboard", "clearml", "sagemaker", "vertexai", "azureml",
+      // Deployment
+      "flask", "fastapi", "streamlit", "gradio", "docker", "kubernetes", "triton", "bentoml",
+      // Programming languages
+      "r", "julia", "cpp", "java",
+      // Other
+      "jupyter", "kaggle", "colab", "rapids", "databricks", "knime", "datarobot"
     ],
-
     game: [
-      "unity",
-      "unreal",
-      "godot",
-      "threejs",
-      "webgl",
-      "c#",
-      "c++",
-      "javascript",
-      "python",
-      "playcanvas",
-      "pixijs",
-      "phaser",
+      // Game engines
+      "unity", "unreal", "godot", "gamemaker", "phaser", "construct", "rpgmaker", "cocos2d",
+      "threejs", "playcanvas", "babylonjs", "pixijs", "webgl", "love2d", "defold",
+      // Languages used in game dev
+      "csharp", "c#", "cpp", "c++", "lua", "javascript", "gdscript", "python", "haxe",
+      "blueprint", "rust", "golang", "as3",
+      // Graphics and rendering
+      "opengl", "directx", "vulkan", "hlsl", "glsl", "shader", "blender", "maya", "3dsmax",
+      "zbrush", "substance", "vfx",
+      // Audio
+      "fmod", "wwise", "audiokinetic", "openal", "resonance", "superpowered", "audacity",
+      // Physics
+      "physx", "havok", "box2d", "bullet", "physjs", "matterjs", "chipmunk",
+      // AI and gameplay
+      "navmesh", "pathfinding", "behaviortree", "statemachine", "goap", "mlagents",
+      "proceduralgeneration", "pcg", "levelgeneration",
+      // Networking
+      "photon", "mirror", "fishnet", "steamworks", "playfab", "nakama", "colyseus",
+      "socketio", "websocket", "netcode", "multiplayer",
+      // VR/AR
+      "vr", "ar", "xr", "oculus", "steamvr", "openxr", "arkit", "arcore",
+      // Other
+      "ui", "hud", "animation", "particles", "spritesheet", "tilemap", "voxel", "mobile",
+      "console", "pc", "gamepad", "inputsystem", "savesystem"
     ],
-
     data: [
-      "python",
-      "r",
-      "julia",
-      "sql",
-      "tableau",
-      "powerbi",
-      "pandas",
-      "numpy",
-      "matplotlib",
-      "seaborn",
-      "plotly",
-      "scikit-learn",
-      "jupyter",
-      "spark",
-      "hadoop",
-      "excel",
-      "postgresql",
-      "mysql",
-      "mongodb",
-      "bigquery",
+      // Programming languages for data science
+      "python", "r", "sql", "julia", "scala", "java", "csharp", "javascript",
+      // Data processing
+      "pandas", "numpy", "dplyr", "tidyr", "data.table", "polars", "spark", "koalas",
+      "excel", "spreadsheet", "powerquery", "vba",
+      // Data visualization
+      "matplotlib", "seaborn", "plotly", "bokeh", "tableau", "powerbi", "looker", "d3",
+      "kibana", "grafana", "superset", "dataviz", "ggplot2", "shiny",
+      // Statistics & Machine Learning
+      "statsmodels", "scikit-learn", "sklearn", "tensorflow", "pytorch", "xgboost",
+      "regression", "classification", "clustering", "neuralnetwork", "bayesian", "stan",
+      "tidymodels", "caret", "prophet", "forecasting", "timeseries",
+      // Databases & storage
+      "mysql", "postgresql", "oracle", "sql", "mongodb", "cassandra", "datalake", "datawarehouse",
+      "redshift", "snowflake", "bigquery", "athena", "hive", "impala", "presto", "druid",
+      // Big Data
+      "hadoop", "spark", "hive", "kafka", "flink", "beam", "airflow", "dbt", "etl", "elt",
+      // Cloud
+      "aws", "azure", "gcp", "s3", "emr", "databricks", "dataproc", "dataflow", "azuresynapse",
+      // Reporting & BI
+      "excel", "tableau", "powerbi", "looker", "microstrategy", "qlik", "sisense", "reporting",
+      "dashboard", "bi", "businessintelligence",
+      // Tools & Other
+      "jupyter", "anaconda", "spyder", "rstudio", "alteryx", "talend", "informatica",
+      "fivetran", "matillion", "domo", "webscrapers", "beautifulsoup", "selenium"
     ],
   };
 
-  // Check if any selected technology is invalid for the chosen category
-  const invalidTechs = technologies.filter((tech) => {
-    // Convert to lowercase for case-insensitive comparison
-    const techLower = tech.toLowerCase();
+  // Special case: if no category is selected, always return valid
+  if (!category) {
+    return { valid: true, message: "" };
+  }
 
-    // Check if the technology exists in the category's tech group
-    return !categoryTechGroups[category as keyof typeof categoryTechGroups]?.some(
-      (validTech: string) =>
-        validTech.toLowerCase() === techLower ||
-        techLower.includes(validTech.toLowerCase()) || // Check if tech contains valid tech name
-        validTech.includes(techLower) // Check if valid tech contains the tech name
-    );
-  });
-
-  if (invalidTechs.length > 0) {
-    return {
-      valid: false,
-      message: `The following technologies may not be suitable for ${category} development: ${invalidTechs.join(
-        ", "
-      )}. Please reconsider your selection or choose a different category.`,
+  // Check if the requested category exists
+  if (!Object.keys(categoryTechGroups).includes(categoryLower)) {
+    return { 
+      valid: false, 
+      message: `Unknown category: ${category}. Please select a valid category.` 
     };
   }
 
-  return { valid: true, message: "" };
+  // Check if technologies include at least one that matches the specified category
+  const normalizedTechs = technologies.map(tech => tech.toLowerCase().trim());
+  
+  // Look for any technology that matches the category
+  const categoryTechs = categoryTechGroups[categoryLower as keyof typeof categoryTechGroups];
+  
+  // Find technologies that are strongly associated with other categories but not this one
+  const techCategories: Record<string, string[]> = {};
+  
+  // Build a mapping of tech to categories
+  Object.entries(categoryTechGroups).forEach(([cat, techs]) => {
+    techs.forEach(tech => {
+      if (!techCategories[tech]) {
+        techCategories[tech] = [];
+      }
+      techCategories[tech].push(cat);
+    });
+  });
+  
+  // Check if any technology is valid for this category
+  const validTechs = normalizedTechs.filter(tech => 
+    categoryTechs.some(validTech => 
+      // Partial matching to catch variations
+      tech.includes(validTech) || validTech.includes(tech)
+    )
+  );
+  
+  // If at least one technology is valid for this category, we're good
+  if (validTechs.length > 0) {
+    return { valid: true, message: "" };
+  }
+  
+  // If we get here, none of the technologies match this category
+  // Let's find a better category suggestion
+  const techCount: Record<string, number> = {};
+  Object.keys(categoryTechGroups).forEach(cat => {
+    techCount[cat] = 0;
+  });
+  
+  // Count how many technologies match each category
+  normalizedTechs.forEach(tech => {
+    Object.entries(categoryTechGroups).forEach(([cat, catTechs]) => {
+      if (catTechs.some(validTech => 
+        tech.includes(validTech) || validTech.includes(tech)
+      )) {
+        techCount[cat]++;
+      }
+    });
+  });
+  
+  // Find the category with the most matches
+  let bestCategory = categoryLower;
+  let bestCount = 0;
+  
+  Object.entries(techCount).forEach(([cat, count]) => {
+    if (count > bestCount) {
+      bestCount = count;
+      bestCategory = cat;
+    }
+  });
+  
+  // Only suggest a different category if we found some matches
+  if (bestCount > 0 && bestCategory !== categoryLower) {
+    return {
+      valid: false,
+      message: `The selected technologies seem more appropriate for ${bestCategory} development than ${categoryLower}. Consider changing the category or selecting different technologies.`,
+      suggestedCategory: bestCategory
+    };
+  }
+  
+  // If we can't find a good match in any category, give a generic message with a warning flag
+  return {
+    valid: true, // Let users proceed with their creative combination
+    message: "Note: Your selected technologies are unusual for this category, but we'll let you proceed with your creative combination!",
+    warning: true // Add warning flag so frontend can display the message
+  };
 }
 
 /**
@@ -786,14 +881,19 @@ export const generateProject = CatchAsyncError(
         );
       }
 
-      // Validate technology and category combinations
+    // Validate technology and category combinations
       const validationResult = validateTechnologyCategoryPair(
         technologies,
         category
       );
+      
+      // Still proceed if valid, but include warning message in the response if present
       if (!validationResult.valid) {
         return next(new ErrorHandler(validationResult.message, 400));
       }
+      
+      // Add warning message to the response if needed
+      const warningMessage = validationResult.warning ? validationResult.message : null;
 
       // Generate project with OpenAI
       console.log("\n🤖 Generating OpenAI prompt...");
@@ -983,10 +1083,21 @@ export const generateProject = CatchAsyncError(
       }
 
       console.log("\n✅ Project generation complete!");
-      res.status(201).json({
-        success: true,
-        project,
-      });
+       
+      // Include warning message in the success response if present
+      const responseObject: {
+  success: boolean;
+  project: typeof project;
+  warning?: string;
+} = {
+  success: true,
+  project,
+};
+      if (warningMessage) {
+        responseObject.warning = warningMessage;
+      }
+      
+      res.status(201).json(responseObject);
     } catch (parseError) {
       console.error("Error parsing or validating OpenAI response:", parseError);
       console.log("Raw response:", "Failed to parse response content");
