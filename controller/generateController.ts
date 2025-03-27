@@ -55,15 +55,15 @@ function getOptimizedPrompt(preferences: any) {
   // Generate team size text
   let teamSizeText;
   if (teamSize === "solo") {
-    teamSizeText = "exactly one developer";
+    teamSizeText = "exactly one developer (solo project)";
   } else if (teamSize === "small") {
     teamSizeText = exactTeamSize 
-      ? `exactly ${exactTeamSize} team members`
-      : "exactly 2-3 team members, no more and no less";
+      ? `EXACTLY ${exactTeamSize} team members, no more and no less`
+      : "2-3 team members";
   } else { // medium
     teamSizeText = exactTeamSize
-      ? `exactly ${exactTeamSize} team members`
-      : "exactly 4-6 team members, no more and no less";
+      ? `EXACTLY ${exactTeamSize} team members, no more and no less`
+      : "4-6 team members";
   }
 
   // Format technologies list if provided
@@ -88,11 +88,18 @@ ${themeContext}
 ${categoryGuidance}
 
 IMPORTANT CONSTRAINTS:
-1. If the specified team size is 2-3 members, provide either 2 or 3 team roles, not more and not less.
+${exactTeamSize 
+  ? `1. YOU MUST CREATE EXACTLY ${exactTeamSize} TEAM ROLES - NO MORE, NO LESS. The user has explicitly requested ${exactTeamSize} team members.`
+  : `1. If the specified team size is 2-3 members, provide either 2 or 3 team roles, not more and not less.
 2. If the specified team size is 4-6 members, provide between 4 and 6 team roles, not more and not less.
-3. For solo projects, provide exactly 1 role.
+3. For solo projects, provide exactly 1 role.`
+}
 4. Do not exceed the maximum number of roles for the specified team size under any circumstance.
-${exactTeamSize ? `5. You MUST create EXACTLY ${exactTeamSize} team roles as the user specifically requested this number.` : ''}
+
+${exactTeamSize 
+  ? `CRITICAL REMINDER: Create EXACTLY ${exactTeamSize} team roles in your response.` 
+  : ''}
+
 
 Make sure the project is:
 1. Practical and realistic to implement within the given timeframe and team size
@@ -107,7 +114,7 @@ The response should include:
 3. A detailed project description (at least 100 words)
 4. Core features (must-have functionality)
 5. Additional features (nice-to-have extensions)
-6. Team structure with specific roles, required skills for each role, and their responsibilities
+6. Team structure with ${exactTeamSize ? `EXACTLY ${exactTeamSize}` : 'appropriate number of'} specific roles, required skills for each role, and their responsibilities
 7. Learning outcomes for the team members
 
 Format the response in JSON with the following structure EXACTLY:
@@ -126,11 +133,13 @@ Format the response in JSON with the following structure EXACTLY:
         "skills": ["Skill 1", "Skill 2", "Skill 3"],
         "responsibilities": ["Responsibility 1", "Responsibility 2", "Responsibility 3"]
       }
+      ${exactTeamSize ? `// EXACTLY ${exactTeamSize} roles, no more, no less` : ''}
     ]
   },
   "learningOutcomes": ["Learning Outcome 1", "Learning Outcome 2", "Learning Outcome 3", "Learning Outcome 4", "Learning Outcome 5"]
 }
 
+${exactTeamSize ? `FINAL CHECK: Ensure there are EXACTLY ${exactTeamSize} roles in the "teamStructure.roles" array.` : ''}
 Ensure the JSON is properly formatted and can be parsed.`;
 }
 
@@ -875,7 +884,7 @@ export const generateProject = CatchAsyncError(
           new ErrorHandler(
             user.plan === "pro"
               ? "You've reached your monthly project limit of 10 ideas. Please wait until next month for a refresh."
-              : "No project ideas left. Please upgrade to Pro plan.",
+              : "You've reached your limit of 3 project ideas. Free users have a maximum of 3 project ideas total. Please upgrade to Pro.",
             403
           )
         );
@@ -982,6 +991,39 @@ export const generateProject = CatchAsyncError(
         ) {
           throw new Error("Invalid team structure");
         }
+
+        // Validate role count matches exactTeamSize if specified
+  if (projectData.teamStructure && 
+    projectData.teamStructure.roles && 
+    req.body.exactTeamSize) {
+  
+  const exactSize = parseInt(req.body.exactTeamSize);
+  const actualRoleCount = projectData.teamStructure.roles.length;
+  
+  if (actualRoleCount !== exactSize) {
+    console.warn(`Team size mismatch: AI generated ${actualRoleCount} roles but exactTeamSize=${exactSize}`);
+    
+    // Fix the roles array to match exact size
+    if (actualRoleCount > exactSize) {
+      // Too many roles, trim the extras
+      projectData.teamStructure.roles = projectData.teamStructure.roles.slice(0, exactSize);
+      console.log(`Trimmed roles array to ${exactSize} roles`);
+    } else if (actualRoleCount < exactSize) {
+      // Too few roles, duplicate the last one with variations
+      const lastRole = projectData.teamStructure.roles[actualRoleCount - 1];
+      for (let i = actualRoleCount; i < exactSize; i++) {
+        const newRole = {
+          title: `${lastRole.title} ${i+1}`,
+          skills: [...lastRole.skills],
+          responsibilities: [...lastRole.responsibilities],
+          filled: false
+        };
+        projectData.teamStructure.roles.push(newRole);
+      }
+      console.log(`Added additional roles to reach ${exactSize} roles`);
+    }
+  }
+}
 
         const roles = projectData.teamStructure?.roles || [];
         const roleCount = roles.length;
