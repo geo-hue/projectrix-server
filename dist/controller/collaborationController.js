@@ -54,7 +54,7 @@ exports.submitCollaborationRequest = (0, catchAsyncErrors_1.CatchAsyncError)(asy
         }
         const hasRequestsLeft = await (0, pricingUtils_1.checkCollaborationRequestLimit)(applicantId.toString());
         if (!hasRequestsLeft) {
-            return next(new ErrorHandler_1.default("You have reached your collaboration request limit for this month. Upgrade to Pro for unlimited requests.", 403));
+            return next(new ErrorHandler_1.default("You have reached your collaboration request limit. Upgrade to Pro for unlimited requests.", 403));
         }
         // Check if user has reached active collaboration limit
         const canHaveMoreCollaborations = await (0, pricingUtils_1.checkActiveCollaborationLimit)(applicantId.toString());
