@@ -26,6 +26,7 @@ const openai = new openai_1.default({
 const openaiBreaker = new circuitBreaker_1.CircuitBreaker(3, 60000);
 /**
  * Generate an optimized prompt for OpenAI based on user preferences
+ * with improved description formatting and stronger complexity adherence
  */
 function getOptimizedPrompt(preferences) {
     // Extract preferences
@@ -61,12 +62,16 @@ function getOptimizedPrompt(preferences) {
         : "The project should be practical, innovative, and educational.";
     // Generate category-specific guidance
     const categoryGuidance = getCategorySpecificGuidance(category, technologies);
+    // Generate complexity-specific guidance
+    const complexityGuidance = getComplexitySpecificGuidance(complexity);
     // Build the main prompt
     return `Generate a detailed, practical, and innovative ${category} project idea for a ${complexity.level} level (${complexity.percentage}% complexity) team of ${teamSizeText}, estimated to take ${durationText} to complete, ${techList}.
 
 ${themeContext}
 
 ${categoryGuidance}
+
+${complexityGuidance}
 
 IMPORTANT CONSTRAINTS:
 ${exactTeamSize
@@ -80,7 +85,6 @@ ${exactTeamSize
         ? `CRITICAL REMINDER: Create EXACTLY ${exactTeamSize} team roles in your response.`
         : ''}
 
-
 Make sure the project is:
 1. Practical and realistic to implement within the given timeframe and team size
 2. Educational and helps team members grow their skills
@@ -91,25 +95,25 @@ Make sure the project is:
 The response should include:
 1. A creative and descriptive project title
 2. A concise subtitle that summarizes the project
-3. A comprehensive project description (at least 200 words) that clearly explains:
-   - The SPECIFIC PROBLEM this project solves 
-     * Describe the exact pain point or inefficiency in the current process
-     * Quantify the current challenges (e.g., "Users spend X hours doing Y")
-   - WHO the primary users are and EXACTLY HOW they benefit 
-     * Define the target user demographic
-     * Explain their current struggles in detail
-     * Highlight the specific improvements your solution provides
-   - The REAL-WORLD VALUE and MEASURABLE IMPACT 
-     * Provide concrete metrics of improvement
-     * Explain how the solution transforms the user's experience
-     * Quantify time saved, efficiency gained, or problems solved
-   - A CONCRETE, DETAILED USER STORY 
-     * Present a vivid, specific scenario showing how a typical user would interact with the project
-     * Walk through the user's journey and demonstrate the solution's effectiveness
-   - Technical implementation details ONLY AFTER establishing the purpose
-     * Explain how the chosen technologies work together
-     * Describe the system architecture and data flow
-     * Outline key technical challenges and the implementation strategy
+3. A well-structured project description organized in 3 paragraphs (separated by double newlines) that clearly explains:
+   
+   PARAGRAPH 1: THE PROBLEM AND CONTEXT
+   - Describe the specific problem or pain point this project addresses
+   - Explain current inefficiencies or challenges users face
+   - Quantify the issue where possible (e.g., "Users currently spend X hours doing Y")
+   
+   PARAGRAPH 2: THE SOLUTION AND TARGET USERS
+   - Define who will use this solution (target demographic)
+   - Explain how your solution addresses their needs
+   - Highlight the key features that make this solution effective
+   
+   PARAGRAPH 3: REAL-WORLD IMPACT AND IMPLEMENTATION
+   - Describe the tangible benefits and measurable improvements
+   - Explain how the solution transforms the user experience
+   - Briefly outline the technical implementation approach
+   
+   The description should be accessible and appropriate for the specified complexity level.
+  IMPORTANT: DO NOT include "PARAGRAPH 1:", "PARAGRAPH 2:", etc. in the output. Just write natural paragraphs separated by double newlines.
 
 4. Core features (must-have functionality)
 5. Additional features (nice-to-have extensions)
@@ -120,7 +124,7 @@ Format the response in JSON with the following structure EXACTLY:
 {
   "title": "Project Title",
   "subtitle": "Brief project summary",
-  "description": "Detailed project description...",
+  "description": "First paragraph about the problem and context.\n\nSecond paragraph about the solution and target users.\n\nThird paragraph about impact and implementation.",
   "features": {
     "core": ["Feature 1", "Feature 2", "Feature 3", "Feature 4", "Feature 5"],
     "additional": ["Feature 1", "Feature 2", "Feature 3", "Feature 4", "Feature 5"]
@@ -139,7 +143,59 @@ Format the response in JSON with the following structure EXACTLY:
 }
 
 ${exactTeamSize ? `FINAL CHECK: Ensure there are EXACTLY ${exactTeamSize} roles in the "teamStructure.roles" array.` : ''}
-Ensure the JSON is properly formatted and can be parsed.`;
+Ensure the JSON is properly formatted and can be parsed ,Remember to NOT include "PARAGRAPH 1:", "PARAGRAPH 2:", etc. labels in the description.`;
+}
+/**
+ * Provide complexity-specific guidance to ensure proper difficulty level
+ */
+function getComplexitySpecificGuidance(complexity) {
+    // Special handling for very low complexity (beginner friendly)
+    if (complexity.percentage <= 20) {
+        return `CRITICAL COMPLEXITY CONSTRAINT: This is a BEGINNER-LEVEL project (${complexity.percentage}% complexity).
+- Use only the most basic, beginner-friendly technologies
+- Avoid any advanced concepts, patterns, or architectural complexity
+- Focus on fundamentals that someone with just a basic understanding can implement
+- Include detailed explanations assuming minimal prior knowledge
+- Limit scope to simple CRUD operations and basic UI interactions
+- Choose technologies that have excellent documentation and beginner-friendly tutorials
+- Avoid complex state management, optimizations, or advanced features
+- Keep the data model extremely simple
+- Use minimal third-party libraries and dependencies`;
+    }
+    // Beginner level (up to 33%)
+    else if (complexity.percentage <= 33) {
+        return `COMPLEXITY GUIDANCE: This is a BEGINNER-LEVEL project (${complexity.percentage}% complexity).
+- Focus on fundamental concepts and basic implementations
+- Minimize complex architectural patterns
+- Use straightforward, well-documented technologies
+- Keep the scope manageable for newer developers
+- Include clear learning paths and explanations
+- Avoid advanced optimizations or complex state management
+- Limit dependencies to essential, beginner-friendly libraries`;
+    }
+    // Intermediate level (34-66%)
+    else if (complexity.percentage <= 66) {
+        return `COMPLEXITY GUIDANCE: This is an INTERMEDIATE-LEVEL project (${complexity.percentage}% complexity).
+- Balance fundamental concepts with some advanced techniques
+- Introduce moderate architectural complexity
+- Include a wider range of technologies and integrations
+- Expand scope to include more interesting features
+- Allow for some optimization and performance considerations
+- Include more sophisticated state management where appropriate
+- Add more complex business logic and data handling`;
+    }
+    // Advanced level (67-100%)
+    else {
+        return `COMPLEXITY GUIDANCE: This is an ADVANCED-LEVEL project (${complexity.percentage}% complexity).
+- Include sophisticated architectural patterns and best practices
+- Incorporate advanced concepts and cutting-edge technologies
+- Design complex interactions and data flows
+- Focus on performance optimization and scalability
+- Include advanced state management and caching strategies
+- Implement complex business logic and data transformations
+- Consider security, testing, and deployment pipelines
+- Add real-time features, complex animations, or intensive computations`;
+    }
 }
 /**
  * Provide category-specific guidance based on project type
