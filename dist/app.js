@@ -48,7 +48,6 @@ exports.app.use((0, cors_1.default)({
 exports.app.use(compression_1.compressionMiddleware);
 exports.app.use(compression_1.securityHeaders);
 exports.app.use(requestLogger_1.requestLogger);
-exports.app.use(rateLimiter_1.apiRateLimiter);
 exports.app.use(cacheMiddleware_1.staticCacheControl);
 exports.app.use("/api/v1", userRoute_1.default);
 exports.app.use("/api/v1", generateRoute_1.default);
