@@ -56,7 +56,6 @@ app.use(cors({
 app.use(compressionMiddleware);
 app.use(securityHeaders); 
 app.use(requestLogger);
-app.use(apiRateLimiter);
 app.use(staticCacheControl);
 
 app.use("/api/v1", userRouter);
