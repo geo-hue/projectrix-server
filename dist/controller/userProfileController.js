@@ -99,8 +99,10 @@ exports.getPublicProfile = (0, catchAsyncErrors_1.CatchAsyncError)(async (req, r
             username: { $regex: new RegExp(`^${username}$`, 'i') }
         }).select('name username avatar email createdAt projectsGenerated projectsCollaborated');
         if (!user) {
-            console.log("❌ User not found with username:", username);
-            return next(new ErrorHandler_1.default("User not found", 404));
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
         }
         console.log("✅ User found:", user._id, user.username);
         // Get user profile
