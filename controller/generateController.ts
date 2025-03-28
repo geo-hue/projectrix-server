@@ -116,12 +116,26 @@ Make sure the project is:
 The response should include:
 1. A creative and descriptive project title
 2. A concise subtitle that summarizes the project
-3. A comprehensive project description (at least 150 words) that explains:
-   - The purpose and value of the project
-   - How the technologies work together
-   - The architecture and data flow
-   - Key challenges and how to approach them
-   - Implementation strategy and timeline considerations
+3. A comprehensive project description (at least 200 words) that clearly explains:
+   - The SPECIFIC PROBLEM this project solves 
+     * Describe the exact pain point or inefficiency in the current process
+     * Quantify the current challenges (e.g., "Users spend X hours doing Y")
+   - WHO the primary users are and EXACTLY HOW they benefit 
+     * Define the target user demographic
+     * Explain their current struggles in detail
+     * Highlight the specific improvements your solution provides
+   - The REAL-WORLD VALUE and MEASURABLE IMPACT 
+     * Provide concrete metrics of improvement
+     * Explain how the solution transforms the user's experience
+     * Quantify time saved, efficiency gained, or problems solved
+   - A CONCRETE, DETAILED USER STORY 
+     * Present a vivid, specific scenario showing how a typical user would interact with the project
+     * Walk through the user's journey and demonstrate the solution's effectiveness
+   - Technical implementation details ONLY AFTER establishing the purpose
+     * Explain how the chosen technologies work together
+     * Describe the system architecture and data flow
+     * Outline key technical challenges and the implementation strategy
+
 4. Core features (must-have functionality)
 5. Additional features (nice-to-have extensions)
 6. Team structure with ${exactTeamSize ? `EXACTLY ${exactTeamSize}` : 'appropriate number of'} specific roles, required skills for each role, and their responsibilities

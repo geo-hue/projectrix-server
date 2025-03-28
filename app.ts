@@ -20,7 +20,7 @@ import paymentRouter from "./routes/paymentRoutes";
 import githubRouter from "./routes/githubRoutes";
 import emailRouter from "./routes/emailRoutes";
 import promoCodeRouter from "./routes/promoCodeRoutes";
-import { apiRateLimiter, projectGenerationRateLimiter } from "./middleware/rateLimiter";
+import { projectGenerationRateLimiter } from "./middleware/rateLimiter";
 import { compressionMiddleware, securityHeaders } from "./middleware/compression";
 import { staticCacheControl } from "./middleware/cacheMiddleware";
 
