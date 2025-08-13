@@ -47,10 +47,13 @@ app.use(cookieParser());
 
 
 app.use(cors({
-    origin: process.env.ORIGINS?.split(","),
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization']
+  origin: [
+    'https://projectrix.app',
+    'https://www.projectrix.app'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(compressionMiddleware);
